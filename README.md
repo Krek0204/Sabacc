@@ -17,6 +17,8 @@
 
 ## Быстрый старт
 
+Нужны Docker Desktop, Node.js 18+ и свободный порт **80**.
+
 ### 1. Переменные окружения
 
 ```bash
@@ -25,38 +27,47 @@ cp .env.example .env
 
 Для локального Docker оставьте `PUBLIC_IP=localhost`. Пароль из примера годится только для разработки.
 
-### 2. Запуск всего стека
+### 2. Сборка frontend на хосте
+
+Nginx отдаёт статику из `./frontend/dist` на вашей машине, а не из Docker-образа frontend. Сначала:
+
+```bash
+cd frontend
+npm ci
+npm run build
+cd ..
+```
+
+`npm ci` берёт версии из `package-lock.json`. Без него `npx tsc` может подтянуть несовместимый TypeScript и сборка упадёт.
+
+### 3. Запуск стека
 
 ```bash
 docker compose --env-file .env up --build
 ```
 
-После сборки:
+Первая сборка backend в Docker занимает несколько минут. Контейнер `sabacc_frontend` сразу завершается с кодом 0 — так и задумано: он только собирает образ, игру отдаёт Nginx.
+
+После старта:
 
 - Игра: [http://localhost](http://localhost)
-- Backend API: [http://localhost/api](http://localhost/api) (через Nginx)
-- Swagger: [http://localhost:8080/swagger-ui/index.html](http://localhost:8080/swagger-ui/index.html) — если пробросить порт `8080` у backend
+- Backend API: [http://localhost/api/v1/...](http://localhost/api/v1/room/all)
 
-Образы собираются из исходников в этом репозитории. Чужие теги Docker Hub предыдущей команды в compose больше не используются.
+Порт `8080` наружу не проброшен, Swagger с хоста недоступен. Партия — на двоих: откройте второй браузер (или инкогнито) и введите другое имя.
 
-Nginx сейчас отдаёт статику из `./frontend/dist` на хосте. Перед `docker compose up` соберите клиент:
-
-```bash
-cd frontend && npm ci && npm run build && cd ..
-```
-
-### 3. Только база
+### 4. Только база
 
 ```bash
 docker compose -f docker-compose-db.yaml up -d
 ```
 
-### 4. Локальная разработка без полного Compose
+### 5. Локальная разработка без полного Compose
 
-Backend (из каталога `backend`, нужна запущенная PostgreSQL):
+Поднимите PostgreSQL (шаг 4). Backend по умолчанию ходит на хост `postgres`, с машины его нужно переопределить:
 
 ```bash
-./gradlew bootRun
+cd backend
+SPRING_DATASOURCE_DATABASE_HOST=localhost ./gradlew bootRun
 ```
 
 Frontend:
@@ -67,7 +78,7 @@ npm ci
 npm run dev
 ```
 
-Vite поднимается на порту `5173` и проксирует `/api` и `/ws` на `localhost:8080`.
+Vite поднимается на порту `5173` и проксирует `/api` и `/ws` на `localhost:8080`. Игра: [http://localhost:5173](http://localhost:5173).
 
 ## Структура
 
