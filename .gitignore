@@ -1,0 +1,68 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+Desktop.ini
+
+# Editors / IDEs
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+*.swp
+*.swo
+*~
+
+# Logs and temp
+logs/
+*.log
+/temp/
+/uploads/
+
+# Local runtime data — not source
+/postgres-data/
+/grafana-data/
+*.db
+
+# Node / frontend
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Gradle / Java
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/main/**/build/
+!**/src/test/**/build/
+out/
+bin/
+!**/src/main/**/bin/
+!**/src/test/**/bin/
+
+# STS / Eclipse
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+
+# NetBeans
+/nbproject/private/
+/nbbuild/
+/nbdist/
+/.nb-gradle/
+/amplicode.xml
+
+# Accidental files
+backend/deps.txt
