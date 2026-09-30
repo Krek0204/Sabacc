@@ -1,0 +1,9 @@
+---
+description: Ветки, Jira SCRUM, GitHub PR и changelog Sabacc
+alwaysApply: true
+---
+
+Применяй правила [Git](../../docs/agents/rules/git.md),
+[Jira и PR](../../docs/agents/rules/tickets.md),
+[changelog](../../docs/agents/rules/changelog.md).
+Эти файлы — единый источник правил; не поддерживай отдельную копию здесь.

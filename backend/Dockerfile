@@ -2,7 +2,7 @@ FROM gradle:jdk21-alpine AS builder
 
 WORKDIR /app
 COPY . .
-RUN gradle build --no-daemon -x test
+RUN ./gradlew bootJar --no-daemon
 
 FROM eclipse-temurin:21-jdk-jammy
 
