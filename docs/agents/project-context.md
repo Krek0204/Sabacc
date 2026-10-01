@@ -14,8 +14,10 @@
 - Remote `origin` в изученном checkout соответствует текущему GitHub.
 - Доступ к Jira и удалённым настройкам GitHub при подготовке не подтверждён.
   Статусы Jira, обязательные reviewers, branch protection и серверные checks неизвестны.
-- GitHub Actions workflows в изученном checkout отсутствуют; локальные проверки
-  не означают, что настроен обязательный CI. Эти документы сами не подключают Jira/GitHub.
+- GitHub Actions: `CI` (frontend lint) и `PR gate` (формат заголовка PR,
+  актуальность относительно `main`). Workflows есть в `.github/workflows/`;
+  обязательные checks для merge настраиваются защитой ветки `main`.
+  Frontend lint на существующем коде красный и пока не должен быть required.
 
 Инструкции команды: [CONTRIBUTING.md](../../CONTRIBUTING.md).
 Карта how-to: [docs/README.md](../README.md); [README](../../README.md);
