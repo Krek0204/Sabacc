@@ -1,0 +1,9 @@
+---
+description: Общие инструкции и контекст проекта Sabacc
+alwaysApply: true
+---
+
+Следуй [AGENTS.md](../../AGENTS.md).
+Перед задачей прочитай [контекст](../../docs/agents/project-context.md) и
+[команды проверок](../../docs/agents/verification.md).
+Для затронутых модулей прочитай `frontend/AGENTS.md` и/или `backend/AGENTS.md`.

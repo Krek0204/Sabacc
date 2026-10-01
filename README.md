@@ -19,6 +19,18 @@
 
 Нужны Docker Desktop, Node.js 18+ и свободный порт **80**.
 
+Самый короткий путь — из корня репозитория:
+
+```sh
+./scripts/dev.sh up
+```
+
+Скрипт создаст `.env`, если его нет, установит зависимости, соберёт frontend и Docker-образы,
+затем запустит стенд. Для повторного старта без сборки — `./scripts/dev.sh start`.
+Только сборка — `./scripts/dev.sh build`; остановка — `./scripts/dev.sh stop`;
+состояние — `./scripts/dev.sh status`; логи — `./scripts/dev.sh logs`.
+Скрипт не запускает тесты и не удаляет данные БД. Ниже — те же шаги вручную.
+
 ### 1. Переменные окружения
 
 ```bash
@@ -55,30 +67,12 @@ docker compose --env-file .env up --build
 
 Порт `8080` наружу не проброшен, Swagger с хоста недоступен. Партия — на двоих: откройте второй браузер (или инкогнито) и введите другое имя.
 
-### 4. Только база
+### Другие режимы и диагностика
 
-```bash
-docker compose -f docker-compose-db.yaml up -d
-```
-
-### 5. Локальная разработка без полного Compose
-
-Поднимите PostgreSQL (шаг 4). Backend по умолчанию ходит на хост `postgres`, с машины его нужно переопределить:
-
-```bash
-cd backend
-SPRING_DATASOURCE_DATABASE_HOST=localhost ./gradlew bootRun
-```
-
-Frontend:
-
-```bash
-cd frontend
-npm ci
-npm run dev
-```
-
-Vite поднимается на порту `5173` и проксирует `/api` и `/ws` на `localhost:8080`. Игра: [http://localhost:5173](http://localhost:5173).
+Пошаговый запуск, остановка, отдельная БД и ограничения dev-режима описаны
+в [инструкции запуска](docs/how-to/local-setup.md).
+Текущий dev proxy требует исправления для полного игрового сценария;
+[диагностика](docs/how-to/troubleshooting.md) описывает известные причины.
 
 ## Структура
 
@@ -97,11 +91,11 @@ prometheus.yml
 
 | Ключ | Назначение |
 | --- | --- |
-| `PUBLIC_IP` | Хост для CORS и WebSocket в профиле `prod` |
+| `PUBLIC_IP` | Передаётся backend; текущие origins в YAML автоматически не заменяет |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | Доступ к PostgreSQL |
 | `VITE_API_URL` | Префикс API при сборке frontend (`/api`) |
 | `CRON_USER_CLEANUP` | Cron-выражение очистки анонимных пользователей |
-| `SPRING_PROFILES_ACTIVE` | Профиль Spring (`prod` в текущем compose) |
+| `SPRING_PROFILES_ACTIVE` | В Compose жёстко задан `prod`; значение из `.env` его не меняет |
 
 Файл `.env` в git не попадает. В репозитории только `.env.example`.
 
@@ -113,6 +107,13 @@ Nginx (`app.conf`) слушает любой `server_name`.
 
 ## Документация
 
+- [`docs/README.md`](docs/README.md) — карта документации и how-to
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — работа команды и критерии готовности
+- [`docs/architecture.md`](docs/architecture.md) — базовая архитектура
+
+- [`AGENTS.md`](AGENTS.md) — начало работы для агентов, контекст и правила разработки
+- [`docs/agents/project-context.md`](docs/agents/project-context.md) — карта кода и текущие интеграции
+- [`changelog.md`](changelog.md) — значимые изменения проекта
 - [`Project.md`](Project.md) — продукт, правила, архитектура, требования
 - [`Bugs.md`](Bugs.md) — критические и прочие дефекты по состоянию ветки
 - [`backend/README.md`](backend/README.md) — REST/WebSocket DTO и эндпоинты
