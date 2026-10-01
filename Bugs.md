@@ -57,19 +57,23 @@
 
 ### C4. Кубики: значение `1` ломает модалку (софтлок вскрытия)
 
-**Где:** `frontend/src/features/Game/ui/GameDiceModal/GameDiceModal.tsx`, строка 28:
+**Статус:** исправлено в ветке `bugfix/SCRUM-24-fix-falsy-one-checks`
+([SCRUM-24](https://isa-sabacc.atlassian.net/browse/SCRUM-24)) —
+проверка `isDiceFace` (1–6), хуки вызываются до раннего `return`.
+
+**Где было:** `frontend/src/features/Game/ui/GameDiceModal/GameDiceModal.tsx`:
 
 ```ts
 if (!first || !second) return null;
 ```
 
-**Что происходит:** в JS `1` — falsy. Если на кубике выпала единица, компонент возвращает `null`. Ранний `return` стоит **до** `useEffect` — при смене значений это ещё и нарушение Rules of Hooks.
+**Что происходило:** в JS `1` — falsy. Если на кубике выпала единица, компонент возвращал `null`. Ранний `return` стоял **до** `useEffect` — при смене значений это ещё и нарушение Rules of Hooks.
 
-Сервер в это время ждёт `SELECT_DICE` (`GameSession.replaceImposterCard`).
+Сервер в это время ждал `SELECT_DICE` (`GameSession.replaceImposterCard`).
 
 **Ожидание:** показать оба значения 1–6 и дать выбрать кубик.
 
-**Почему критично:** при Самозванце партия может навсегда застрять на вскрытии. Вероятность хотя бы одной единицы на двух кубиках — 11/36.
+**Почему было критично:** при Самозванце партия могла навсегда застрять на вскрытии. Вероятность хотя бы одной единицы на двух кубиках — 11/36.
 
 Тот же паттерн на картах — см. H10.
 
@@ -236,7 +240,11 @@ if (!first || !second) return null;
 
 ### H10. Карта номинала 1 рисуется рубашкой
 
-**Где:** `frontend/src/entities/GameCard/ui/GameCard.tsx`, строки 82–86:
+**Статус:** исправлено в ветке `bugfix/SCRUM-24-fix-falsy-one-checks`
+([SCRUM-24](https://isa-sabacc.atlassian.net/browse/SCRUM-24)) —
+`getNumericCardAsset` проверяет `value == null`, а не truthy.
+
+**Где было:** `frontend/src/entities/GameCard/ui/GameCard.tsx`:
 
 ```ts
 if (card?.value) {
@@ -244,7 +252,7 @@ if (card?.value) {
 }
 ```
 
-`value === 1` ложно. Единица, в том числе Самозванец после выбора кубика «1», выглядит как закрытая карта.
+`value === 1` было ложно. Единица, в том числе Самозванец после выбора кубика «1», выглядела как закрытая карта.
 
 ---
 
@@ -462,7 +470,7 @@ UI: `length >= 4`, максимума нет. `CreateUserDto` без Bean Valida
 1. Банк раунда: победителю сумма `spentChips` обоих (убрать или явно специфицировать «налог с разницы»).
 2. `nextRound`: первый ход — у победителя.
 3. Выбор 3 жетонов на сервере; вырезать лишние; починить confirm на клиенте.
-4. Кубики и карты: проверки на `== null`, не на truthy.
+4. ~~Кубики и карты: проверки на `== null`, не на truthy.~~ (сделано: C4, H10)
 5. Заблокировать ходы на время вскрытия; синхронизировать `GameSession`.
 6. Прятать чужие карты; привязывать STOMP-ход к handshake `playerId`.
 7. `useSetupRoom`: не делать `leave/all` на каждом маунте; уважать `roomId` из URL; атомарный match-or-create (H1, H14).

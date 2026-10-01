@@ -8,6 +8,7 @@ import Dice6 from '@/shared/assets/images/cube6.png';
 import BackgroundTable from '@/shared/assets/images/table_cubes.png'
 import cls from './GameDiceModal.module.scss';
 import { classNames } from '@/shared/lib/classNames/classNames';
+import { isDiceFace } from './isDiceFace';
 
 interface GameDiceModalProps {
   className?: string;
@@ -24,10 +25,11 @@ export const GameDiceModal = memo((props: GameDiceModalProps) => {
   const [isRolling, setIsRolling] = useState(true); // Флаг, крутятся ли кубики
 
   const { onSelect, first, second } = props;
-
-  if (!first || !second) return null;
+  const isValid = isDiceFace(first) && isDiceFace(second);
 
   useEffect(() => {
+    if (!isValid) return;
+
     setIsRolling(true);
     setCountdown(5); // Сбрасываем обратный отсчёт
 
@@ -44,7 +46,7 @@ export const GameDiceModal = memo((props: GameDiceModalProps) => {
     }, 1000);
 
     // Останавливаем всё через 5 секунд
-    setTimeout(() => {
+    const stopTimeout = setTimeout(() => {
       clearInterval(interval); // Остановка смены картинок
       clearInterval(countdownInterval); // Остановка таймера
       setDiceImages([diceMap[first - 1], diceMap[second - 1]]); // Устанавливаем финальные кубики
@@ -54,8 +56,11 @@ export const GameDiceModal = memo((props: GameDiceModalProps) => {
     return () => {
       clearInterval(interval);
       clearInterval(countdownInterval);
+      clearTimeout(stopTimeout);
     };
-  }, [first, second]);
+  }, [first, second, isValid]);
+
+  if (!isValid) return null;
 
   return (
     <div className={cls.GameDiceModal}>
