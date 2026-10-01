@@ -7,6 +7,9 @@
 
 ### Added
 
+- Добавлен базовый GitHub Actions CI: frontend lint, проверка формата заголовка PR
+  и актуальности ветки относительно `main`
+  ([SCRUM-25](https://isa-sabacc.atlassian.net/browse/SCRUM-25)).
 - Добавлен `scripts/dev.sh`: сборка и запуск локального стенда одной командой,
   отдельные команды управления контейнерами и просмотра логов.
 
@@ -21,6 +24,8 @@
   lint-задач, действия при `403` на push (collaborator или fork+PR), сжатие
   `project-context.md` относительно архитектуры; срез проверок вынесен в
   `docs/agents/verification-history.md`.
+- Формат заголовка PR: `SCRUM-<номер> Краткое описание с заглавной буквы`
+  ([SCRUM-25](https://isa-sabacc.atlassian.net/browse/SCRUM-25)).
 
 ### Fixed
 

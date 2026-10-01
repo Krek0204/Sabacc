@@ -1,0 +1,77 @@
+name: PR gate
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize, ready_for_review]
+
+concurrency:
+  group: pr-gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  pr-title:
+    name: PR title
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate PR title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          node <<'EOF'
+          const title = process.env.PR_TITLE ?? '';
+          const maxLen = 100;
+          // SCRUM-<n> + space + Capitalized one-line summary
+          const pattern = /^SCRUM-[1-9]\d* [A-ZА-ЯЁ].*$/u;
+          const errors = [];
+
+          if (!title) {
+            errors.push('заголовок пустой');
+          } else {
+            if (title.includes('\n')) {
+              errors.push('заголовок должен быть в одну строку');
+            }
+            if (title.length > maxLen) {
+              errors.push(`длиннее ${maxLen} символов (сейчас ${title.length})`);
+            }
+            if (!pattern.test(title)) {
+              errors.push(
+                'нужен формат: SCRUM-<номер> Краткое описание с заглавной буквы',
+              );
+            }
+          }
+
+          if (errors.length) {
+            console.error('Неверный заголовок PR:');
+            console.error(`  «${title}»`);
+            for (const error of errors) {
+              console.error(`  - ${error}`);
+            }
+            console.error('');
+            console.error('Пример: SCRUM-24 Исправить falsy-проверки для значения 1 на кубиках');
+            process.exit(1);
+          }
+
+          console.log(`OK: «${title}»`);
+          EOF
+
+  up-to-date:
+    name: Up to date with main
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Require rebase onto origin/main
+        run: |
+          git fetch --no-tags origin main
+          if git merge-base --is-ancestor origin/main HEAD; then
+            echo "OK: ветка содержит актуальный origin/main"
+          else
+            echo "::error::Ветка отстаёт от main. Выполните rebase на origin/main и сделайте force-with-lease push."
+            echo "Коммиты в main, которых нет в ветке:"
+            git log --oneline HEAD..origin/main | head -20
+            exit 1
+          fi
