@@ -23,6 +23,7 @@ import cardSand6 from '@/shared/assets/images/card_sand_6.png';
 import { GameCardType } from '../types/GameCardType';
 import cls from './GameCard.module.scss'
 import { Card } from '@/features/Game/model/types/game';
+import { getNumericCardAsset } from './getNumericCardAsset';
 
 export interface GameCardProps {
   type: GameCardType;
@@ -79,8 +80,9 @@ export const GameCard = memo((props: GameCardProps) => {
       return type === GameCardType.BLOOD ? cardBloodSylop : cardSandSylop;
     }
 
-    if (card?.value) {
-      return allCards[type][card.value];
+    const face = getNumericCardAsset(allCards[type], card?.value);
+    if (face) {
+      return face;
     }
 
     return type === GameCardType.BLOOD ? cardBloodBack : cardSandBack;

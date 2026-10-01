@@ -24,6 +24,9 @@
 
 ### Fixed
 
+- Модалка кубиков больше не скрывается при выпадении `1`; карта номинала `1`
+  снова показывает лицо, а не рубашку
+  ([SCRUM-24](https://isa-sabacc.atlassian.net/browse/SCRUM-24), Bugs.md C4, H10).
 - Исправлен запуск Gradle wrapper на Unix; Docker-сборка backend использует
   закреплённую проектом версию Gradle и собирает исполняемый `bootJar`.
 - Добавлены `.dockerignore` для frontend/backend: локальные зависимости,
