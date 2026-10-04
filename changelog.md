@@ -23,6 +23,10 @@
 
 ### Changed
 
+- В `Project.md` правила Kessel Sabacc приведены к мини-игре Star Wars Outlaws:
+  личный банк раунда и налог проигравшего, три хода в раунде вместо лимита в три раунда,
+  иерархия рук и 16 жетонов смены
+  ([SCRUM-27](https://isa-sabacc.atlassian.net/browse/SCRUM-27)).
 - Уточнены инструкции агентов: уровни чтения в `AGENTS.md`, lint как known-red вне
   lint-задач, действия при `403` на push (collaborator или fork+PR), сжатие
   `project-context.md` относительно архитектуры; срез проверок вынесен в
