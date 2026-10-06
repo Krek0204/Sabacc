@@ -320,6 +320,9 @@ WebSocket:
 
 ## 12. Развёртывание
 
+Ниже — снимок выкладки прошлой команды, не инструкция текущего репозитория.
+Как поднять этот код на своём Linux-сервере: [docs/how-to/server-deploy.md](docs/how-to/server-deploy.md).
+
 Локально:
 
 - Backend: порт **8080**, БД **5432**, frontend Vite **5173** (`npm run dev`), прокси `/api` и `/ws` на backend.
