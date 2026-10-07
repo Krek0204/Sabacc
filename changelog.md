@@ -7,6 +7,9 @@
 
 ### Added
 
+- Добавлена инструкция запуска на Linux-сервере (`docs/how-to/server-deploy.md`):
+  тот же Compose, замена исторического IP и ограничения без HTTPS
+  ([SCRUM-28](https://isa-sabacc.atlassian.net/browse/SCRUM-28)).
 - Добавлен базовый GitHub Actions CI: frontend lint, проверка формата заголовка PR
   и актуальности ветки относительно `main`
   ([SCRUM-25](https://isa-sabacc.atlassian.net/browse/SCRUM-25)).
