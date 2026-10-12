@@ -121,6 +121,8 @@ if (!first || !second) return null;
 
 ### C8. Ждущая комната закрывается как FINISHED при любом дисконнекте хоста
 
+**Статус:** исправлено в [SCRUM-29](https://isa-sabacc.atlassian.net/browse/SCRUM-29). Пока комната ждёт соперника или оба только вошли по REST, обрыв сокета больше не переводит её в `FINISHED`.
+
 **Где:** `SessionRoomService.handlePlayerSocketDisconnect` (строки 261–274).
 
 **Что происходит:** игра стартует только когда **оба** WebSocket подключены (`handlePlayerSocketConnection` + `SessionReadyEvent`). Пока второго игрока нет, `isPlayerSecondConnected` остаётся `false` (дефолт в `SessionRoom`).
@@ -142,6 +144,8 @@ if (!first || !second) return null;
 ## High
 
 ### H1. Вход в конкретную комнату из списка не работает
+
+**Статус:** исправлено в [SCRUM-29](https://isa-sabacc.atlassian.net/browse/SCRUM-29). «Зайти» и `redirectAfterLogin` открывают комнату из `roomId`. Обновление страницы возвращает в свою незавершённую комнату и не вызывает `leave/all`.
 
 **Где:**
 
@@ -283,6 +287,8 @@ if (card?.value) {
 ---
 
 ### H14. Гонка матчмейкинга: два «Играть» → две комнаты, игроки не встречаются
+
+**Статус:** исправлено в [SCRUM-29](https://isa-sabacc.atlassian.net/browse/SCRUM-29). `create` под общим замком входит в уже ожидающую чужую комнату. Если `join` не удался, клиент создаёт сессию и не остаётся без `sessionId`.
 
 **Где:** `useSetupRoom.ts` (строки 49–79); сервер — `getAvailableRoomsForJoin` + `createSessionRoom` без общей блокировки.
 

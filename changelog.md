@@ -39,6 +39,12 @@
 
 ### Fixed
 
+- Пока второй игрок не сел за стол, обрыв сокета создателя комнаты больше не завершает её
+  ([SCRUM-29](https://isa-sabacc.atlassian.net/browse/SCRUM-29), Bugs.md C8).
+- «Зайти» открывает выбранную комнату, а обновление страницы возвращает в свою
+  ([SCRUM-29](https://isa-sabacc.atlassian.net/browse/SCRUM-29), Bugs.md H1).
+- Одновременное «Играть» сажает обоих в одну комнату; неудачный вход не оставляет игрока без сессии
+  ([SCRUM-29](https://isa-sabacc.atlassian.net/browse/SCRUM-29), Bugs.md H14).
 - Модалка кубиков больше не скрывается при выпадении `1`; карта номинала `1`
   снова показывает лицо, а не рубашку
   ([SCRUM-24](https://isa-sabacc.atlassian.net/browse/SCRUM-24), Bugs.md C4, H10).

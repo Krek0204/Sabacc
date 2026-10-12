@@ -5,7 +5,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import ru.ngtu.sabacc.system.event.*;
 import ru.ngtu.sabacc.system.exception.notfound.EntityNotFoundException;
 import ru.ngtu.sabacc.system.exception.session.*;
@@ -24,6 +26,8 @@ public class SessionRoomService {
     private final SessionRoomRepository sessionRoomRepository;
     private final UserService userService;
     private final ApplicationEventPublisher eventPublisher;
+    private final PlatformTransactionManager transactionManager;
+    private final Object matchmakingLock = new Object();
 
     @Transactional(readOnly = true)
     public List<SessionRoom> getAllRooms() {
@@ -91,8 +95,14 @@ public class SessionRoomService {
         return availableRooms;
     }
 
-    @Transactional
     public SessionRoom createSessionRoom(Long userId) {
+        synchronized (matchmakingLock) {
+            return new TransactionTemplate(transactionManager)
+                    .execute(status -> openSessionRoom(userId));
+        }
+    }
+
+    private SessionRoom openSessionRoom(Long userId) {
         User user = userService.getUserById(userId);
 
         log.info("User [{}] creating session room", userId);
@@ -100,6 +110,20 @@ public class SessionRoomService {
         List<SessionRoom> unfinished = sessionRoomRepository.findAllByPlayerFirstIdAndStatusNot(userId, SessionRoomStatus.FINISHED);
         if (!unfinished.isEmpty()) {
             throw new UnfinishedSessionException(userId);
+        }
+
+        for (SessionRoom candidate : sessionRoomRepository.findAllAvailableForJoin(SessionRoomStatus.WAITING_SECOND_USER)) {
+            if (candidate.getPlayerFirst() == null || candidate.getPlayerFirst().getId().equals(userId)) {
+                continue;
+            }
+            try {
+                joinSession(candidate.getId(), userId);
+                SessionRoom joined = getRoomById(candidate.getId());
+                log.info("User [{}] joined existing waiting room {}", userId, joined.getId());
+                return joined;
+            } catch (SessionIsFullException | JoinFinishedSessionException | UserAlreadyJoinedSessionException ex) {
+                log.info("Waiting room {} is no longer joinable for user [{}]", candidate.getId(), userId);
+            }
         }
 
         SessionRoom newSessionRoom = SessionRoom.builder()
@@ -263,7 +287,10 @@ public class SessionRoomService {
         log.info("Session [{}]: playerFirstConnected={}, playerSecondConnected={}, currentStatus={}",
                 sessionId, sessionRoom.isPlayerFirstConnected(), sessionRoom.isPlayerSecondConnected(), sessionRoom.getStatus());
 
-
+        if (sessionRoom.getStatus() == SessionRoomStatus.WAITING_SECOND_USER
+                || sessionRoom.getStatus() == SessionRoomStatus.ALL_USERS_JOINED) {
+            return;
+        }
 
         if(!sessionRoom.isPlayerFirstConnected() && !sessionRoom.isPlayerSecondConnected()) {
             if (sessionRoom.getStatus() != SessionRoomStatus.FINISHED) {
