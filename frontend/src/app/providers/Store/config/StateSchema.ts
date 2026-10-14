@@ -1,3 +1,4 @@
+import { rtkApi } from '@/shared/api/rtkApi';
 import {
   AnyAction,
   EnhancedStore,
@@ -9,12 +10,12 @@ import { AuthSchema } from '@/features/Auth/model/types/authSchema';
 
 export interface StateSchema {
   auth: AuthSchema;
-  [key: string]: any;
+  rtkApi: ReturnType<typeof rtkApi.reducer>;
 }
 
 export type StateSchemaKey = keyof StateSchema;
 
-export type MountedReducers = Record<StateSchemaKey, boolean>;
+export type MountedReducers = Partial<Record<StateSchemaKey, boolean>>;
 
 export interface ReducerManager {
   getReducerMap: () => ReducersMapObject<StateSchema>;

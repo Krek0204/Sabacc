@@ -1,22 +1,28 @@
-import { useEffect, useState } from 'react';
+import type { RoomState } from '@/entities/Room/types/room';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSelector } from 'react-redux';
 import { selectCurrentUser } from '@/features/Auth/model/selectors/authSelector';
 import { useWebSocketGame } from '@/shared/lib/hooks/useWebSocketGame';
 import { useSetupRoom } from '@/shared/lib/hooks/useSetupRoom';
 import axios from 'axios';
-import { GameState, GameStatus, TurnType } from '../types/game';
+import { DiceDetails, RoundResult, GameState, GameStatus, TurnType } from '../types/game';
 
 export const useGameState = () => {
   const playerId = useSelector(selectCurrentUser)?.id;
-  const sessionId = playerId !== undefined ? useSetupRoom(playerId) : undefined;
+  const sessionId = useSetupRoom(playerId);
   const client = useWebSocketGame(playerId, sessionId || undefined);
 
-  const [roomState, setRoomState] = useState<any>();
+  const [roomState, setRoomState] = useState<RoomState | null>(null);
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [diceDetails, setDiceDetails] = useState(null);
-  const [winnerId, setWinnerId] = useState();
-  const [roundResult, setRoundResult] = useState();
+  const [diceDetails, setDiceDetails] = useState<DiceDetails | null>(null);
+  const [winnerId, setWinnerId] = useState<number | null>(null);
+  const [roundResult, setRoundResult] = useState<RoundResult | null>(null);
+
+  const roomStateRef = useRef(roomState);
+  useEffect(() => {
+    roomStateRef.current = roomState;
+  }, [roomState]);
 
   // Получаем состояние комнаты
   const fetchRoomState = async (id?: string | number) => {
@@ -30,10 +36,10 @@ export const useGameState = () => {
   };
 
   // Получаем состояние игры (только если статус комнаты подходящий)
-  const fetchGameState = async (id?: string | number) => {
+  const fetchGameState = useCallback(async (id?: string | number) => {
     if (!id) return;
     console.log("получаем состояние игры В fetchGameState() useGameState")
-    if (!roomState || roomState.status === GameStatus.WAITING_SECOND_USER) {
+    if (!roomStateRef.current || roomStateRef.current.status === GameStatus.WAITING_SECOND_USER) {
       //setGameState(null);
       return;
     }
@@ -41,15 +47,15 @@ export const useGameState = () => {
       const data = (await axios.get(`${__API__}/v1/room/game/current-state?sessionId=${id}`)).data;
       console.log('[DEBUG] fetchGameState', data);
       setGameState(data);
-    } catch (err: any) {
-      if (err.response?.status === 404) {
+    } catch (err) {
+      if (axios.isAxiosError(err) && err.response?.status === 404) {
         // Игра ещё не начата, gameState недоступен
         setGameState(null);
         return;
       }
       console.error('Ошибка при получении состояния игры:', err);
     }
-  };
+  }, []);
 
   const leaveCurrentRoom = async () => {
     if (!sessionId) return;
@@ -65,7 +71,7 @@ export const useGameState = () => {
     }
   };
 
-  const showDiceModal = (details: any) => setDiceDetails(details);
+  const showDiceModal = (details: DiceDetails | null) => setDiceDetails(details);
 
   const handleDiceSelection = (index: number) => {
     if (client && playerId && roomState?.id) {
@@ -93,27 +99,33 @@ export const useGameState = () => {
     if (sessionId && roomState && roomState.status !== GameStatus.WAITING_SECOND_USER) {
       fetchGameState(sessionId);
     }
-  }, [sessionId, roomState]);
+  }, [sessionId, roomState, fetchGameState]);
 
   // Подписки на сокет при подключении клиента
   useEffect(() => {
     if (client && sessionId) {
+      let subscriptions: Array<{ unsubscribe: () => void }> = [];
+      const unsubscribe = () => {
+        subscriptions.forEach(subscription => subscription.unsubscribe());
+        subscriptions = [];
+      };
       const handleConnect = () => {
+        unsubscribe();
         // --- ГАРАНТИРОВАННО ЗАПРОСИТЬ АКТУАЛЬНЫЕ ДАННЫЕ ---
         fetchRoomState(sessionId);
         fetchGameState(sessionId);
 
         // Подписка на обновление прогресса игры
-        client.subscribe(`/queue/session/${sessionId}/game-progress`, (message) => {
+        subscriptions.push(client.subscribe(`/queue/session/${sessionId}/game-progress`, (message) => {
           const data = JSON.parse(message.body);
           console.log('[WS] Получен статус игры:', data.status);
-          setRoomState((prev: any) => ({ ...prev, status: data.status }));
+          setRoomState((prev) => prev ? ({ ...prev, status: data.status }) : prev);
           //fetchRoomState(sessionId);
           fetchGameState(sessionId);
-        });
+        }));
 
         // Подписка на подтвержденные ходы
-        client.subscribe(`/queue/session/${sessionId}/accepted-turns`, (message) => {
+        subscriptions.push(client.subscribe(`/queue/session/${sessionId}/accepted-turns`, (message) => {
           const data = JSON.parse(message.body);
           if (data.turnType === "AWAITING_DICE" && data.playerId === playerId) {
             showDiceModal(data.details);
@@ -122,34 +134,40 @@ export const useGameState = () => {
           }
           fetchGameState(sessionId);
           fetchRoomState(sessionId);
-        });
+        }));
 
         // Результаты игры
-        client.subscribe(`/queue/session/${sessionId}/game-results`, (message) => {
+        subscriptions.push(client.subscribe(`/queue/session/${sessionId}/game-results`, (message) => {
           const data = JSON.parse(message.body);
           setWinnerId(data.winnerId);
           localStorage.removeItem('roomId');
           console.log('[INFO] Игра завершена — roomId удалён из localStorage по событию game-results');
-        });
+        }));
 
         // Результаты раунда
-        client.subscribe(`/queue/session/${sessionId}/round-results`, (message) => {
+        subscriptions.push(client.subscribe(`/queue/session/${sessionId}/round-results`, (message) => {
           const data = JSON.parse(message.body);
           setRoundResult(data);
           fetchGameState(sessionId);
           fetchRoomState(sessionId);
-        });
+        }));
 
         // Ошибки
-        client.subscribe(`/queue/session/${sessionId}/errors`, (message) => {
+        subscriptions.push(client.subscribe(`/queue/session/${sessionId}/errors`, (message) => {
           console.error('WebSocket error:', JSON.stringify(message.body));
-        });
+        }));
       };
 
+      const previousOnConnect = client.onConnect;
       client.onConnect = handleConnect;
+      if (client.connected) handleConnect();
       setIsLoading(false);
+      return () => {
+        unsubscribe();
+        client.onConnect = previousOnConnect;
+      };
     }
-  }, [client, sessionId, playerId]);
+  }, [client, sessionId, playerId, fetchGameState]);
 
   useEffect(() => {
     if (roomState?.status === GameStatus.FINISHED) {

@@ -1,3 +1,4 @@
+import type { RoundResult, FetchGameState } from '../../model/types/game';
 import { memo, useCallback, useEffect, useState } from 'react';
 import { useSelector } from 'react-redux';
 import { Client } from '@stomp/stompjs';
@@ -5,7 +6,7 @@ import { classNames } from '@/shared/lib/classNames/classNames';
 import { selectCurrentUser } from '@/features/Auth';
 import { GameHeader } from '../GameHeader/GameHeader';
 import { GameFooter } from '../GameFooter/GameFooter';
-import { Card, GameState, TurnType } from '../../model/types/game';
+import { Card, GameState } from '../../model/types/game';
 import cls from './Game.module.scss';
 import { useOpponent } from '@/shared/lib/hooks/useOpponent';
 import { RoomState } from '@/entities/Room/types/room';
@@ -21,6 +22,15 @@ import { TokensTypes } from '../../model/types/game';
 
 
 
+// Проверяем необязательное поле без добавления его в серверный DTO.
+const getSelectedTokens = (player: unknown): TokensTypes[] => {
+  if (typeof player !== 'object' || player === null || !('selectedTokens' in player)) return [];
+  const tokens = player.selectedTokens;
+  return Array.isArray(tokens)
+    ? tokens.filter((token): token is TokensTypes => Object.values(TokensTypes).includes(token))
+    : [];
+};
+
 interface GameProps {
   client: Client;
   gameState: GameState;
@@ -28,9 +38,9 @@ interface GameProps {
   diceDetails: { first: number; second: number } | null;
   handleDiceSelection: (index: number) => void;
   winnerId: number | null;
-  roundResult: any | null;
-  leaveCurrentRoom: any;
-  fetchGameState: any;
+  roundResult: RoundResult | null;
+  leaveCurrentRoom: () => Promise<void>;
+  fetchGameState: FetchGameState;
 
   myTokens: TokensTypes[];
   userId?: number;
@@ -48,15 +58,13 @@ export const Game = memo(({
   leaveCurrentRoom,
   fetchGameState,
   myTokens,
-  userId,
   onPlayToken
 }: GameProps) => {
   const user = useSelector(selectCurrentUser);
   const opponent = useOpponent(user?.id, roomState);
   const navigate = useNavigate();
 
-  // Локальное состояние для жетонов
-  const [playerTokens, setPlayerTokens] = useState<string[]>();
+
 
 
 const playerIndex = gameState.players[0].playerId === user?.id ? 0 : 1;
@@ -105,7 +113,7 @@ const playerIndex = gameState.players[0].playerId === user?.id ? 0 : 1;
        }),
      });
    }
- }, [client, roomState, user?.id, onPlayToken]);
+ }, [client, roomState, user, onPlayToken]);
 
 
 
@@ -167,7 +175,7 @@ useEffect(() => {
   return (
     <>
       {/* Модалка раунда */}
-      {currentModal === 'ROUND' && (
+      {currentModal === 'ROUND' && roundResult && (
         <GameRoundResultModal
           roundResult={roundResult}
           roomState={roomState}
@@ -207,13 +215,13 @@ useEffect(() => {
           opponent={opponent}
           isCurentTurn={opponent?.id === gameState.currentPlayerId}
           gameState={gameState}
-          selectedTokens={(opponent?.id === user?.id ? myTokens : (gameState.players[playerIndex] as any).selectedTokens) || []}
+          selectedTokens={(opponent?.id === user?.id ? myTokens : getSelectedTokens(gameState.players[playerIndex])) || []}
         />
 
         <GameTable
           gameState={gameState}
           sendTurn={sendTurn}
-          userId={user?.id!}
+          userId={user!.id}
         />
 
         <GameFooter
@@ -222,7 +230,7 @@ useEffect(() => {
           gameState={gameState}
           sendTurn={sendTurn}
           leaveCurrentRoom={leaveCurrentRoom}
-          selectedTokens={myTokens as any}
+          selectedTokens={myTokens}
           onPlayToken={handlePlayToken}
         />
       </div>

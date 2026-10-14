@@ -1,3 +1,4 @@
+import { RoomState } from '@/entities/Room/types/room';
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
@@ -33,7 +34,7 @@ const AvailableRoomsPage: React.FC = () => {
     axios
       .get(`${__API__}/v1/room/all`)
       .then((res) => {
-        const formattedRooms: RoomInfo[] = res.data.map((room: any) => ({
+        const formattedRooms: RoomInfo[] = res.data.map((room: RoomState) => ({
           id: room.id,
           status: room.status,
           playerFirstId: room.playerFirst?.id ?? null,
