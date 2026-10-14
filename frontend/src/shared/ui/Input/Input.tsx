@@ -34,6 +34,8 @@ export const Input = memo((props: InputProps) => {
         label,
         ...otherProps
     } = props;
+    // label пока не отображается и не должен попадать в атрибуты input.
+    void label;
     const ref = useRef<HTMLInputElement>(null);
     const [isFocused, setIsFocused] = useState(false);
 

@@ -1,3 +1,5 @@
+import { useSelector } from 'react-redux';
+import { selectCurrentUser } from '@/features/Auth';
 import { classNames } from '@/shared/lib/classNames/classNames';
 import cls from './GamePage.module.scss';
 import { Game } from '@/features/Game';
@@ -42,15 +44,8 @@ const GamePage = () => {
     fetchGameState,
   } = useGameState();
 
+  const currentUser = useSelector(selectCurrentUser);
   let loader = null;
-  let roomId = null;
-
-  useEffect(() => {
-    if (roomState && roomState.id) {
-      roomId = roomState.id;
-    }
-  }, [roomState]);
-
   if (!client) {
     loader = <div className={classNames(cls.loader, {}, [])}>Подключение к серверу</div>;
   } else if (!roomState) {
@@ -75,8 +70,7 @@ const [usedTokens, setUsedTokens] = useState<TokensTypes[]>([]);
 
     useEffect(() => {
             if (!gameState || !client) return;
-            // @ts-ignore
-            const myUserId = client?.userId;
+            const myUserId = currentUser?.id;
             if (typeof myUserId === 'undefined') return;
 
             const myPlayer = gameState.players.find(p => p.playerId === myUserId);
@@ -86,7 +80,7 @@ const [usedTokens, setUsedTokens] = useState<TokensTypes[]>([]);
               setHasSelectedTokens(true);
               setIsModalOpen(false); // закрываем окно выбора если оно вдруг открылось
             }
-          }, [gameState, client]);
+          }, [gameState, client, currentUser?.id]);
 
 
 
@@ -100,21 +94,6 @@ const [usedTokens, setUsedTokens] = useState<TokensTypes[]>([]);
       setIsModalOpen(true);
     }
   }, [gameStatus, hasSelectedTokens]);
-
-  const handleSelectTokens = (tokens: TokensTypes[]) => {
-    setMyTokens(tokens);
-    setIsModalOpen(false);
-    console.log("Выбраны жетоны:", tokens);
-    if (client) {
-        // @ts-ignore
-      client.send(JSON.stringify({
-        action: "SELECT_TOKENS",
-        payload: { tokens }
-      }));
-    }
-  };
-
-
 
 const handlePlayToken = useCallback((token: TokensTypes) => {
   if (usedTokens.includes(token)) {
@@ -131,14 +110,13 @@ const handlePlayToken = useCallback((token: TokensTypes) => {
       destination: `/app/input/session/${roomState.id}/turn`,
       body: JSON.stringify({
         sessionId: roomState.id,
-        // @ts-ignore
-        playerId: client.userId, // предполагается, что userId есть
+        playerId: currentUser?.id,
         turnType: 'PLAY_TOKEN',
         details: { token }
       }),
     });
   }
-}, [client, roomState, usedTokens]);
+}, [client, roomState, usedTokens, currentUser?.id]);
 
 
 
@@ -328,7 +306,7 @@ const tokenNameToEnum: Record<string, TokensTypes> = {
 
         {loader ? (
           loader
-        ) : (
+        ) : client && gameState && roomState ? (
           <Game
             client={client}
             gameState={gameState}
@@ -341,11 +319,10 @@ const tokenNameToEnum: Record<string, TokensTypes> = {
             fetchGameState={fetchGameState}
 
             myTokens={myTokens.filter(t => !usedTokens.includes(t))}
-            // @ts-ignore
-            userId={client?.userId}
+            userId={currentUser?.id}
             onPlayToken={handlePlayToken}
           />
-        )}
+        ) : null}
 
 
 

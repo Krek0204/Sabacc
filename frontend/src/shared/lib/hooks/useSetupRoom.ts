@@ -111,7 +111,7 @@ export async function setupSessionRoom(playerId: number): Promise<number | undef
     const availableRoomsResponse = await axios.get(`${API_BASE}/available-for-join?userId=${playerId}`);
     const availableRooms = availableRoomsResponse.data;
 
-    console.log('[DEBUG] Доступные комнаты:', availableRooms.map((r: any) => ({
+    console.log('[DEBUG] Доступные комнаты:', availableRooms.map((r: RoomPayload) => ({
       id: r.id,
       status: r.status,
       playerFirst: r.playerFirst?.id,
@@ -121,12 +121,12 @@ export async function setupSessionRoom(playerId: number): Promise<number | undef
     let roomId: string | number | undefined = availableRooms.length ? availableRooms[0].id : undefined;
 
     if (roomId) {
-      const roomToJoin = availableRooms.find((r: any) => r.id === roomId);
+      const roomToJoin = availableRooms.find((r: RoomPayload) => r.id === roomId);
       console.log('[DEBUG] Присоединяемся к комнате:', roomToJoin);
       try {
         await axios.post(`${API_BASE}/${roomId}/join?userId=${playerId}`);
         console.log('[INFO] Успешно присоединились к комнате', roomId);
-      } catch (error: any) {
+      } catch (error) {
         console.error('[ERROR] Ошибка при join:', error);
         roomId = undefined;
       }
@@ -149,7 +149,7 @@ export async function setupSessionRoom(playerId: number): Promise<number | undef
   return undefined;
 }
 
-export const useSetupRoom = (playerId: number) => {
+export const useSetupRoom = (playerId: number | undefined) => {
   const [sessionId, setSessionId] = useState<number | undefined>(undefined);
 
   useEffect(() => {

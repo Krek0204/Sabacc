@@ -1,5 +1,6 @@
-import { classNames } from '@/shared/lib/classNames/classNames';
-import { memo, ReactNode, useEffect } from 'react';
+import type { RoundResult } from '../../model/types/game';
+import type { RoomState } from '@/entities/Room/types/room';
+import { memo } from 'react';
 import cls from './GameRoundResultModal.module.scss';
 import { useSelector } from 'react-redux';
 import { selectCurrentUser } from '@/features/Auth';
@@ -8,8 +9,8 @@ import CreditImg from '@/shared/assets/images/credit.png'
 import BackgroundTable from '@/shared/assets/images/table_cubes.png'
 
 interface GameRoundResultModalProps {
-  roundResult: any;
-  roomState: any;
+  roundResult: RoundResult;
+  roomState: RoomState;
   onClose: () => void;
 }
 
@@ -29,7 +30,7 @@ export const GameRoundResultModal = memo(({ roundResult, roomState, onClose }: G
         <div className={cls.content}>
           <div className={cls.title}>РЕЗУЛЬТАТ РАУНДА</div>
           <ul className={cls.list}>
-            {roundResult.players.map((player: any) => (
+            {roundResult.players.map((player) => (
               <li key={player.playerId} className={cls.container}>
                 <h4 className={cls.nickname}>
                   <span>{getUsernameById[player.playerId]}</span>

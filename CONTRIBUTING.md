@@ -21,8 +21,8 @@
 - Документация и changelog обновлены либо объяснено отсутствие изменений.
 - PR просмотрен другим участником команды; замечания разрешены.
 - Перед merge проверены конфликты и актуальные проверки PR
-  (`PR title`, `Up to date with main`; frontend lint пока не обязателен для merge —
-  существующий код красный, см. verification).
+  (`PR title`, `Up to date with main`, `Frontend lint`; настройка required checks
+  проверяется отдельно, см. verification).
 - После merge подтверждена целевая ветка; Jira обновлена в рамках принятого workflow.
   Merge не означает, что изменение уже развёрнуто на сервере.
 
@@ -55,8 +55,8 @@
 
 - Проверить командные доступы к Jira/GitHub и назначить reviewers.
 - Согласовать реальные Jira-статусы и условия переходов.
-- Frontend lint уже в GitHub Actions (`Frontend lint`), но не закреплён как required check,
-  пока не станет зелёным. Затем добавить backend CI с отдельной тестовой БД.
+- Проверить `Frontend lint` в GitHub Actions после публикации исправлений и закрепить
+  его как required check. Затем добавить backend CI с отдельной тестовой БД.
 - Защитить `main`: PR, required checks `PR title` и `Up to date with main`,
   up-to-date strict; усилить review/checks по мере готовности.
 - Зафиксировать поддерживаемые версии Node/JDK и способ обновления зависимостей.

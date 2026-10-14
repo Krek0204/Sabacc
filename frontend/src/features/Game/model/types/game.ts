@@ -64,3 +64,8 @@ export enum TurnType {
   SELECT_DICE = "SELECT_DICE",
 }
 
+
+export type SendTurn = (turnType: string, details?: object) => void;
+export type FetchGameState = (id?: string | number) => Promise<void>;
+export interface DiceDetails { first: number; second: number; }
+export interface RoundResult { players: Array<{ playerId: number; spentChips: number }>; }
