@@ -1,13 +1,13 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useSelector } from 'react-redux';
 import { Client } from '@stomp/stompjs';
-import { classNames } from '@/shared/lib/classNames/classNames';
+import hud from '@/shared/ui/Hud/Hud.module.scss';
 import { useCountdown, useDeadlineCountdown } from '@/shared/lib/countdown/useCountdown';
 import { CountdownTimer } from '@/shared/ui/CountdownTimer';
 import { selectCurrentUser } from '@/features/Auth';
 import { GameHeader } from '../GameHeader/GameHeader';
 import { GameFooter } from '../GameFooter/GameFooter';
-import { Card, GameState, TurnType } from '../../model/types/game';
+import { Card, GameState, TokensTypes } from '../../model/types/game';
 import cls from './Game.module.scss';
 import { useOpponent } from '@/shared/lib/hooks/useOpponent';
 import { RoomState } from '@/entities/Room/types/room';
@@ -19,7 +19,7 @@ import { GameResultModal } from '../GameResultModal/GameResultModal';
 import { useNavigate } from 'react-router-dom';
 import { getRouteMain } from '@/shared/const/router';
 import { GameTable } from '../GameTable/GameTable';
-import { TokensTypes } from '../../model/types/game';
+import { GameRulesDialog } from '../GameRules/GameRulesDialog';
 import { opponentTokensLeft } from '../../model/opponentTokensLeft';
 import { reconnectDeadlineFromLeftAt } from '../../model/reconnectDeadline';
 import { timeoutTurn } from '../../model/timeoutTurn';
@@ -60,8 +60,6 @@ interface GameProps {
   fetchGameState: any;
 
   myTokens: TokensTypes[];
-  userId?: number;
-  onPlayToken?: (token: TokensTypes) => void;
 }
 
 export const Game = memo(({
@@ -77,21 +75,15 @@ export const Game = memo(({
   finishLeave,
   fetchGameState,
   myTokens,
-  userId,
-  onPlayToken,
 }: GameProps) => {
   const user = useSelector(selectCurrentUser);
   const opponent = useOpponent(user?.id, roomState);
   const navigate = useNavigate();
 
-  // Локальное состояние для жетонов
-  const [playerTokens, setPlayerTokens] = useState<string[]>();
-
-
-const playerIndex = gameState.players[0].playerId === user?.id ? 0 : 1;
-
-  console.log('[Game] myTokens prop:', myTokens);
-
+  const playerIndex = gameState.players[0].playerId === user?.id ? 0 : 1;
+  const player = gameState.players[playerIndex];
+  const opponentPlayer = gameState.players.find((item) => item.playerId !== user?.id);
+  const [rulesOpen, setRulesOpen] = useState(false);
   const [modalCards, setModalCards] = useState<{ cards: Card[], type: GameCardType } | null>(null);
 
   // Управление модалками через одно состояние
@@ -113,10 +105,7 @@ const playerIndex = gameState.players[0].playerId === user?.id ? 0 : 1;
   const opponentId = opponent?.id
     ?? gameState.players.find((player) => player.playerId !== user?.id)?.playerId;
   const isMyTurn = user?.id != null && user.id === gameState.currentPlayerId;
-  const opponentServerTokens = gameState.players.find(
-    (player) => user?.id != null && String(player.playerId) !== String(user.id),
-  )?.tokens;
-  const hiddenTokensLeft = opponentTokensLeft(opponentServerTokens?.length);
+  const hiddenTokensLeft = opponentTokensLeft(opponentPlayer?.tokens?.length);
   const awayDeadline = opponentLeftDeadline(roomState, user?.id);
   const opponentAway = awayDeadline != null;
   const returnSecondsLeft = useDeadlineCountdown(awayDeadline);
@@ -124,7 +113,7 @@ const playerIndex = gameState.players[0].playerId === user?.id ? 0 : 1;
   // Отправка хода
   const sendTurn = useCallback((turnType: string, details: object = {}) => {
       console.log('[SEND TURN] turnType:', turnType, 'details:', details);
-    if (client && user) {
+    if (client.connected && user) {
       client.publish({
         destination: `/app/input/session/${roomState.id}/turn`,
         body: JSON.stringify({
@@ -142,6 +131,14 @@ const playerIndex = gameState.players[0].playerId === user?.id ? 0 : 1;
     setWaitingForOpponentRound(false);
     setMatchDraw(true);
     setForcedWinnerId(null);
+    setCurrentModal('GAME');
+  }, []);
+
+  const showWinner = useCallback((playerId: number) => {
+    roundDecidedRef.current = true;
+    setWaitingForOpponentRound(false);
+    setMatchDraw(false);
+    setForcedWinnerId(playerId);
     setCurrentModal('GAME');
   }, []);
 
@@ -163,6 +160,15 @@ const playerIndex = gameState.players[0].playerId === user?.id ? 0 : 1;
     (finishLeave ?? leaveCurrentRoom)?.();
     navigate(getRouteMain());
   }, [finishLeave, leaveCurrentRoom, navigate]);
+
+  const handleSurrender = () => {
+    if (!client.connected || opponentId == null || roundDecidedRef.current || currentModal === 'GAME') {
+      return;
+    }
+
+    publishRoundAction('forfeit');
+    showWinner(opponentId);
+  };
 
   const finishRoundByTimeout = useCallback(() => {
     if (roundClosedRef.current || roundDecidedRef.current) {
@@ -215,41 +221,6 @@ const playerIndex = gameState.players[0].playerId === user?.id ? 0 : 1;
 
 
 
- const handlePlayToken = useCallback((token: TokensTypes) => {
-   if (!isMyTurn) {
-     return;
-   }
-
-   console.log('[Game] play token:', token);
-
-   // Передаем на верхний уровень для обновления состояния
-   onPlayToken?.(token);
-
-   // Отправка хода на сервер
-   if (client && user) {
-     client.publish({
-       destination: `/app/input/session/${roomState.id}/turn`,
-       body: JSON.stringify({
-         sessionId: roomState.id,
-         playerId: user.id,
-         turnType: 'PLAY_TOKEN',
-         details: { token },
-       }),
-     });
-   }
- }, [client, isMyTurn, roomState, user?.id, onPlayToken]);
-
-
-
-
-
-useEffect(() => {
-  console.log('[Game] myTokens updated:', myTokens);
-}, [myTokens]);
-
-
-
-  // Определяем, какие карты показать в модалке
   useEffect(() => {
     const playerIndex = gameState.players[0].playerId === user?.id ? 0 : 1;
     if (gameState.players[playerIndex].bloodCards.length > 1) {
@@ -297,6 +268,12 @@ useEffect(() => {
       if (data.playerId == null || String(data.playerId) === String(user.id)) {
         return;
       }
+      if (data.action === 'forfeit') {
+        if (!roundDecidedRef.current && String(data.playerId) === String(opponentId)) {
+          showWinner(user.id);
+        }
+        return;
+      }
       if (
         data.round != null
         && roundKeyRef.current != null
@@ -320,7 +297,7 @@ useEffect(() => {
         }
         return;
       }
-      if (data.action !== 'timeout' && data.action !== 'forfeit') {
+      if (data.action !== 'timeout') {
         return;
       }
       if (roundDecidedRef.current) {
@@ -358,7 +335,7 @@ useEffect(() => {
       subscription?.unsubscribe();
       client.onConnect = previousOnConnect;
     };
-  }, [client, roomState.id, showDraw, user]);
+  }, [client, opponentId, roomState.id, showDraw, showWinner, user]);
 
   // Показ модалки игры, если победитель есть и нет открытой модалки раунда
   useEffect(() => {
@@ -409,8 +386,21 @@ useEffect(() => {
     setWaitingForOpponentRound(!opponentClosedRef.current);
   };
 
+  const actionsBlocked = !bothReadyToPlay || currentModal !== null || opponentAway
+    || Boolean(diceDetails || modalCards) || waitingForOpponentRound;
+  const canAct = isMyTurn && !actionsBlocked && client.connected;
+  const visibleTurnSeconds = isMyTurn && bothReadyToPlay && currentModal === null && forcedWinnerId == null
+    ? turnSecondsLeft
+    : undefined;
+
+  useEffect(() => {
+    if (actionsBlocked) {
+      setRulesOpen(false);
+    }
+  }, [actionsBlocked]);
+
   const shownWinnerId = forcedWinnerId ?? winnerId ?? null;
-  const resultIsDraw = matchDraw || gameDraw;
+  const resultIsDraw = forcedWinnerId == null && (matchDraw || gameDraw);
 
   return (
     <>
@@ -452,7 +442,7 @@ useEffect(() => {
       {!waitingForOpponentRound && (
       <>
       {/* Модалка карт */}
-      {modalCards && (
+      {currentModal !== 'GAME' && modalCards && (
         <GameCardModal
           cards={modalCards.cards}
           sendTurn={sendTurn}
@@ -461,7 +451,7 @@ useEffect(() => {
       )}
 
       {/* Модалка кубиков */}
-      {diceDetails && (
+      {currentModal !== 'GAME' && diceDetails && (
         <GameDiceModal
           first={diceDetails.first}
           second={diceDetails.second}
@@ -469,36 +459,44 @@ useEffect(() => {
         />
       )}
 
-      {/* Основной интерфейс игры */}
-      <div className={classNames(cls.container, {}, [])}>
-        <div className={cls.roomId}>Комната {roomState.id}</div>
-        {isMyTurn && bothReadyToPlay && currentModal === null && forcedWinnerId == null && (
-          <div className={cls.turnTimer}>
-            <CountdownTimer secondsLeft={turnSecondsLeft} caption="на ход" />
-          </div>
-        )}
+      <div className={`${hud.panel} ${cls.board}`}>
         <GameHeader
           opponent={opponent}
-          isCurentTurn={opponent?.id === gameState.currentPlayerId}
-          gameState={gameState}
+          player={opponentPlayer}
+          isCurrentTurn={opponentId === gameState.currentPlayerId}
           tokensLeft={hiddenTokensLeft}
+          roomId={roomState.id}
+          round={gameState.round}
+          turnSecondsLeft={visibleTurnSeconds}
         />
 
         <GameTable
           gameState={gameState}
+          player={player}
+          opponent={opponentPlayer}
+          playerName={user?.username ?? 'Вы'}
+          opponentName={opponent?.username ?? 'Соперник'}
+          canDraw={canAct}
           sendTurn={sendTurn}
-          userId={user?.id!}
         />
 
         <GameFooter
-          user={user!}
-          isCurentTurn={user?.id === gameState.currentPlayerId}
-          gameState={gameState}
-          sendTurn={sendTurn}
-          leaveCurrentRoom={leaveCurrentRoom}
-          selectedTokens={myTokens as any}
-          onPlayToken={handlePlayToken}
+          user={user ?? null}
+          player={player}
+          canAct={canAct}
+          selectedTokens={myTokens}
+          onPass={() => sendTurn('PASS')}
+          onSurrender={client.connected && opponentId != null ? handleSurrender : undefined}
+          onShowRules={() => setRulesOpen(true)}
+          onPlayToken={(token) => sendTurn('PLAY_TOKEN', { token })}
         />
+
+        {rulesOpen && !actionsBlocked && (
+          <GameRulesDialog
+            onClose={() => setRulesOpen(false)}
+            turnSecondsLeft={visibleTurnSeconds}
+          />
+        )}
       </div>
       </>
       )}
