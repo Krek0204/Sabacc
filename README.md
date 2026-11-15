@@ -99,11 +99,15 @@ prometheus.yml
 
 Файл `.env` в git не попадает. В репозитории только `.env.example`.
 
-## Что нужно сменить при своём деплое
+## Запуск на своём сервере
 
-В `backend/src/main/resources/application-prod.yml` CORS и WebSocket origins всё ещё завязаны на сервер предыдущей команды (`45.89.66.57`). Перед выкладкой замените их на ваш IP или домен.
+Тот же Compose можно поднять на Linux с открытым портом 80. Пошагово:
+[docs/how-to/server-deploy.md](docs/how-to/server-deploy.md).
 
-Nginx (`app.conf`) слушает любой `server_name`.
+Руководства devops прошлой команды в репозитории нет. IP `45.89.66.57` и образы
+Docker Hub из `Project.md` — исторические. Перед сборкой замените этот адрес
+в `backend/src/main/resources/application-prod.yml`. Переменная `PUBLIC_IP`
+сама origins не подставляет. Nginx (`app.conf`) слушает любой `server_name`.
 
 ## Документация
 

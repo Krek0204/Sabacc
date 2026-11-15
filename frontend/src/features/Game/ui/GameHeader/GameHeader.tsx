@@ -1,61 +1,58 @@
-import { classNames, Mods } from '@/shared/lib/classNames/classNames';
-import { memo } from 'react';
-import cls from './GameHeader.module.scss';
-import { User } from '@/features/Auth/model/types/auth';
-import { GameState } from '../../model/types/game';
-import { GameTokens } from '../GameTokens/GameTokens';
+
 import { GameCard, GameCardType } from '@/entities/GameCard';
-import CreditImg from '@/shared/assets/images/credit.png'
-import ArrowTop from '@/shared/assets/icons/arrorTop.png'
-import { TokensTypes } from '../../model/types/game';
+import { User } from '@/features/Auth/model/types/auth';
+import { formatSelectionCountdown } from '@/shared/lib/countdown/countdown';
+import hud from '@/shared/ui/Hud/Hud.module.scss';
+import { TOKEN_HAND_SIZE } from '../../model/opponentTokensLeft';
+import { Player } from '../../model/types/game';
+import cls from './GameHeader.module.scss';
 
 interface GameHeaderProps {
-  gameState: GameState;
   opponent: User | null;
-  isCurentTurn: boolean;
-  selectedTokens: TokensTypes[];
+  player?: Player;
+  isCurrentTurn: boolean;
+  tokensLeft: number;
+  roomId: number;
+  round: number;
+  turnSecondsLeft?: number;
 }
 
-export const GameHeader = memo((props: GameHeaderProps) => {
-  const { opponent, isCurentTurn, gameState, ...otherProps } = props;
-  const i = gameState?.players[0].playerId == opponent?.id ? 0 : 1;
-
-  const mods: Mods = {
-    [cls.currentUserTurn]: isCurentTurn
-  }
-
-  return (
-    <div className={classNames(cls.header, {}, [])}>
-      <div className={classNames(cls.myCards)}>
-        <GameCard type={GameCardType.BLOOD} isFlipped></GameCard>
-        <GameCard type={GameCardType.SAND} isFlipped></GameCard>
+export const GameHeader = ({
+  opponent, player, isCurrentTurn, tokensLeft, roomId, round, turnSecondsLeft,
+}: GameHeaderProps) => (
+  <header className={cls.header}>
+    <div className={cls.opponent}>
+      <div className={cls.badge} data-active={isCurrentTurn}>
+        <div>
+          <div className={cls.label}>{isCurrentTurn ? 'Ход соперника' : 'Соперник'}</div>
+          <strong>{opponent?.username || 'Соперник'}</strong>
+        </div>
+        <span className={cls.value}>Фишки {player?.remainChips ?? '—'}</span>
       </div>
 
-
-      <div className={cls.myBank}>
-        <span>Остаток: {gameState.players[i].remainChips} </span>
-        <img src={CreditImg} alt="Credit" />
-      </div>
-
-      <div className={classNames(cls.nickname, mods, [])}>
-        <span>{opponent?.username || 'Opponent'}</span>
-      </div>
-
-      <div className={cls.controls}>
-        <GameTokens
-        userId={opponent?.id}
-        selectedTokens={[]}
-        />
-      </div>
-
-
-      <div className={cls.curTurn}>
-        <img src={ArrowTop} className={classNames(cls.arror, { [cls.cur]: isCurentTurn }, [])} />
-      </div>
-
-      <div className={cls.roundContainer}>
-        <span>РАУНД: {gameState.round}</span>
+      <div className={cls.tokens}>
+        <span className={cls.label}>Жетоны соперника ({tokensLeft}/{TOKEN_HAND_SIZE})</span>
+        {Array.from({ length: TOKEN_HAND_SIZE }, (_, index) => (
+          <span className={cls.token} data-used={index >= tokensLeft} key={index} aria-hidden="true">
+            {index < tokensLeft ? '◈' : '×'}
+          </span>
+        ))}
       </div>
     </div>
-  );
-});
+
+    <div className={cls.cards} aria-label="Скрытые карты соперника" role="group">
+      <GameCard type={GameCardType.BLOOD} isFlipped />
+      <GameCard type={GameCardType.SAND} isFlipped />
+    </div>
+
+    <div className={cls.status}>
+      {turnSecondsLeft != null && (
+        <span className={hud.pill}>⏱ Ваш ход {formatSelectionCountdown(turnSecondsLeft)}</span>
+      )}
+      <div className={cls.badge}>
+        <span className={cls.label}>Комната {roomId}</span>
+        <strong className={cls.value}>Раунд {round}</strong>
+      </div>
+    </div>
+  </header>
+);

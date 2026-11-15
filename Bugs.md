@@ -45,7 +45,7 @@
 
 - `backend/src/main/kotlin/ru/ngtu/sabacc/gamecore/player/Player.kt` (строки 10–24) — в конструкторе сразу все 13 жетонов
 - `GameSession.kt` — `SELECT_TOKEN` есть в `waitingForMoveType`, но в `tryMakeTurn` попадает в `else -> return` (строка 178); `requestTokenSelection()` (808–824) нигде не вызывается
-- `frontend/src/pages/GamePage/ui/GamePage.tsx` — кнопка «Подтвердить» только закрывает модалку (`setIsModalOpen(false)`, строки 406–409), `handleSelectTokens` не вызывается; `client.send` / `client.userId` у STOMP-клиента нет
+- `frontend/src/pages/GamePage/ui/GamePage.tsx` — «Подтвердить» запоминает три жетона в `sessionStorage` этой вкладки, на сервер выбор по-прежнему не уходит; `client.userId` у STOMP-клиента нет
 
 **Что происходит:** UI может показать выбор трёх жетонов, но сервер всегда считает, что у игрока все 13. Как только приходит `gameState`, эффект в `GamePage` (строки 76–89) **перезаписывает** `myTokens` серверным списком из 13 штук. На поле `GameTokens` режет список до `.slice(0, 3)` — на экране всегда первые три enum: `NO_TAX`, `TAKE_TWO_CHIPS`, `OTHER_PLAYERS_PAY_ONE`.
 
@@ -121,6 +121,8 @@ if (!first || !second) return null;
 
 ### C8. Ждущая комната закрывается как FINISHED при любом дисконнекте хоста
 
+**Статус:** исправлено в [SCRUM-29](https://isa-sabacc.atlassian.net/browse/SCRUM-29). Пока комната ждёт соперника или оба только вошли по REST, обрыв сокета больше не переводит её в `FINISHED`.
+
 **Где:** `SessionRoomService.handlePlayerSocketDisconnect` (строки 261–274).
 
 **Что происходит:** игра стартует только когда **оба** WebSocket подключены (`handlePlayerSocketConnection` + `SessionReadyEvent`). Пока второго игрока нет, `isPlayerSecondConnected` остаётся `false` (дефолт в `SessionRoom`).
@@ -142,6 +144,8 @@ if (!first || !second) return null;
 ## High
 
 ### H1. Вход в конкретную комнату из списка не работает
+
+**Статус:** исправлено в [SCRUM-29](https://isa-sabacc.atlassian.net/browse/SCRUM-29). «Зайти» и `redirectAfterLogin` открывают комнату из `roomId`. Обновление страницы возвращает в свою незавершённую комнату и не вызывает `leave/all`.
 
 **Где:**
 
@@ -284,6 +288,8 @@ if (card?.value) {
 
 ### H14. Гонка матчмейкинга: два «Играть» → две комнаты, игроки не встречаются
 
+**Статус:** исправлено в [SCRUM-29](https://isa-sabacc.atlassian.net/browse/SCRUM-29). `create` под общим замком входит в уже ожидающую чужую комнату. Если `join` не удался, клиент создаёт сессию и не остаётся без `sessionId`.
+
 **Где:** `useSetupRoom.ts` (строки 49–79); сервер — `getAvailableRoomsForJoin` + `createSessionRoom` без общей блокировки.
 
 **Что происходит:** посадка неатомарна: «есть свободная комната?» и «создать свою» — два разных запроса. Если два игрока жмут «Играть» почти одновременно (типичный сетевой сценарий):
@@ -345,9 +351,9 @@ if (card?.value) {
 
 ## Medium — клиент, комнаты, инфраструктура
 
-### M9. Модалка выбора жетонов открывается по `setTimeout(3000)`
+### M9. Модалка выбора жетонов открывается по `setTimeout(3000)` — снято на клиенте
 
-`GamePage.tsx` строки 146–151: через 3 с локально ставится `ALL_USERS_JOINED`, без статуса комнаты с сервера. Модалка может появиться, пока ещё идёт поиск соперника, и тут же закрыться из-за C3.
+Таймер убран. Окно открывается, когда в комнате уже два игрока и для этой комнаты выбор ещё не подтверждён. Подтверждённый набор хранится в `sessionStorage` и не показывается снова при возврате в меню. Сервер по-прежнему не хранит выбранные три жетона (C3).
 
 ### M10. `TurnType` на фронте неполный
 

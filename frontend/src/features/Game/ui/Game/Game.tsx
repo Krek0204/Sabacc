@@ -1,11 +1,13 @@
-import { memo, useCallback, useEffect, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useSelector } from 'react-redux';
 import { Client } from '@stomp/stompjs';
-import { classNames } from '@/shared/lib/classNames/classNames';
+import hud from '@/shared/ui/Hud/Hud.module.scss';
+import { useCountdown, useDeadlineCountdown } from '@/shared/lib/countdown/useCountdown';
+import { CountdownTimer } from '@/shared/ui/CountdownTimer';
 import { selectCurrentUser } from '@/features/Auth';
 import { GameHeader } from '../GameHeader/GameHeader';
 import { GameFooter } from '../GameFooter/GameFooter';
-import { Card, GameState, TurnType } from '../../model/types/game';
+import { Card, GameState, TokensTypes } from '../../model/types/game';
 import cls from './Game.module.scss';
 import { useOpponent } from '@/shared/lib/hooks/useOpponent';
 import { RoomState } from '@/entities/Room/types/room';
@@ -17,7 +19,30 @@ import { GameResultModal } from '../GameResultModal/GameResultModal';
 import { useNavigate } from 'react-router-dom';
 import { getRouteMain } from '@/shared/const/router';
 import { GameTable } from '../GameTable/GameTable';
-import { TokensTypes } from '../../model/types/game';
+import { GameRulesDialog } from '../GameRules/GameRulesDialog';
+import { opponentTokensLeft } from '../../model/opponentTokensLeft';
+import { reconnectDeadlineFromLeftAt } from '../../model/reconnectDeadline';
+import { timeoutTurn } from '../../model/timeoutTurn';
+
+function opponentLeftDeadline(
+  room: {
+    playerFirst?: { id?: number | string } | null;
+    playerSecond?: { id?: number | string } | null;
+    playerFirstLeftAt?: string | null;
+    playerSecondLeftAt?: string | null;
+  } | null | undefined,
+  myId?: number | string | null,
+): string | null {
+  if (!room || myId == null) {
+    return null;
+  }
+  const iAmFirst = room.playerFirst?.id != null && String(room.playerFirst.id) === String(myId);
+  const mine = iAmFirst ? room.playerFirstLeftAt : room.playerSecondLeftAt;
+  if (mine) {
+    return null;
+  }
+  return reconnectDeadlineFromLeftAt(iAmFirst ? room.playerSecondLeftAt : room.playerFirstLeftAt);
+}
 
 
 
@@ -28,13 +53,13 @@ interface GameProps {
   diceDetails: { first: number; second: number } | null;
   handleDiceSelection: (index: number) => void;
   winnerId: number | null;
+  gameDraw?: boolean;
   roundResult: any | null;
   leaveCurrentRoom: any;
+  finishLeave?: () => void;
   fetchGameState: any;
 
   myTokens: TokensTypes[];
-  userId?: number;
-  onPlayToken?: (token: TokensTypes) => void;
 }
 
 export const Game = memo(({
@@ -44,34 +69,51 @@ export const Game = memo(({
   diceDetails,
   handleDiceSelection,
   winnerId,
+  gameDraw = false,
   roundResult,
   leaveCurrentRoom,
+  finishLeave,
   fetchGameState,
   myTokens,
-  userId,
-  onPlayToken
 }: GameProps) => {
   const user = useSelector(selectCurrentUser);
   const opponent = useOpponent(user?.id, roomState);
   const navigate = useNavigate();
 
-  // Локальное состояние для жетонов
-  const [playerTokens, setPlayerTokens] = useState<string[]>();
-
-
-const playerIndex = gameState.players[0].playerId === user?.id ? 0 : 1;
-
-  console.log('[Game] myTokens prop:', myTokens);
-
+  const playerIndex = gameState.players[0].playerId === user?.id ? 0 : 1;
+  const player = gameState.players[playerIndex];
+  const opponentPlayer = gameState.players.find((item) => item.playerId !== user?.id);
+  const [rulesOpen, setRulesOpen] = useState(false);
   const [modalCards, setModalCards] = useState<{ cards: Card[], type: GameCardType } | null>(null);
 
   // Управление модалками через одно состояние
   const [currentModal, setCurrentModal] = useState<'ROUND' | 'GAME' | null>(null);
+  const [forcedWinnerId, setForcedWinnerId] = useState<number | null>(null);
+  const [myRoundClosed, setMyRoundClosed] = useState(false);
+  const [opponentClosedRound, setOpponentClosedRound] = useState(false);
+  const [waitingForOpponentRound, setWaitingForOpponentRound] = useState(false);
+  const [matchDraw, setMatchDraw] = useState(false);
+  const roundClosedRef = useRef(false);
+  const opponentClosedRef = useRef(false);
+  const roundTimedOutRef = useRef(false);
+  const opponentTimedOutRef = useRef(false);
+  const roundDecidedRef = useRef(false);
+  const leftMatchRef = useRef(false);
+  const roundKeyRef = useRef<number | null>(roundResult?.round ?? null);
+  roundKeyRef.current = roundResult?.round ?? null;
+  const bothReadyToPlay = !roundResult || (myRoundClosed && opponentClosedRound);
+  const opponentId = opponent?.id
+    ?? gameState.players.find((player) => player.playerId !== user?.id)?.playerId;
+  const isMyTurn = user?.id != null && user.id === gameState.currentPlayerId;
+  const hiddenTokensLeft = opponentTokensLeft(opponentPlayer?.tokens?.length);
+  const awayDeadline = opponentLeftDeadline(roomState, user?.id);
+  const opponentAway = awayDeadline != null;
+  const returnSecondsLeft = useDeadlineCountdown(awayDeadline);
 
   // Отправка хода
   const sendTurn = useCallback((turnType: string, details: object = {}) => {
       console.log('[SEND TURN] turnType:', turnType, 'details:', details);
-    if (client && user) {
+    if (client.connected && user) {
       client.publish({
         destination: `/app/input/session/${roomState.id}/turn`,
         body: JSON.stringify({
@@ -84,40 +126,101 @@ const playerIndex = gameState.players[0].playerId === user?.id ? 0 : 1;
     }
   }, [client, user, roomState]);
 
+  const showDraw = useCallback(() => {
+    roundDecidedRef.current = true;
+    setWaitingForOpponentRound(false);
+    setMatchDraw(true);
+    setForcedWinnerId(null);
+    setCurrentModal('GAME');
+  }, []);
+
+  const showWinner = useCallback((playerId: number) => {
+    roundDecidedRef.current = true;
+    setWaitingForOpponentRound(false);
+    setMatchDraw(false);
+    setForcedWinnerId(playerId);
+    setCurrentModal('GAME');
+  }, []);
+
+  const publishRoundAction = useCallback((action: 'closed' | 'forfeit' | 'timeout') => {
+    if (!client?.connected || !user) {
+      return;
+    }
+    client.publish({
+      destination: `/topic/session/${roomState.id}/round-timer`,
+      body: JSON.stringify({ playerId: user.id, action, round: roundResult?.round ?? null }),
+    });
+  }, [client, roundResult, roomState.id, user]);
+
+  const leaveMatch = useCallback(() => {
+    if (leftMatchRef.current) {
+      return;
+    }
+    leftMatchRef.current = true;
+    (finishLeave ?? leaveCurrentRoom)?.();
+    navigate(getRouteMain());
+  }, [finishLeave, leaveCurrentRoom, navigate]);
+
+  const handleSurrender = () => {
+    if (!client.connected || opponentId == null || roundDecidedRef.current || currentModal === 'GAME') {
+      return;
+    }
+
+    publishRoundAction('forfeit');
+    showWinner(opponentId);
+  };
+
+  const finishRoundByTimeout = useCallback(() => {
+    if (roundClosedRef.current || roundDecidedRef.current) {
+      return;
+    }
+    roundTimedOutRef.current = true;
+    publishRoundAction('timeout');
+    if (opponentClosedRef.current && opponentId != null) {
+      roundDecidedRef.current = true;
+      setMatchDraw(false);
+      setWaitingForOpponentRound(false);
+      setForcedWinnerId(opponentId);
+      setCurrentModal('GAME');
+      return;
+    }
+    // Соперник «Закрыть» не присылал: к концу таймера кнопку не нажал никто.
+    showDraw();
+  }, [opponentId, publishRoundAction, showDraw]);
+
+  const passTurnByTimeout = useCallback(() => {
+    if (!isMyTurn || !user) {
+      return;
+    }
+    const me = gameState.players.find((player) => player.playerId === user.id);
+    const action = timeoutTurn({
+      hasDice: Boolean(diceDetails),
+      sandCount: me?.sandCards.length ?? 0,
+      bloodCount: me?.bloodCards.length ?? 0,
+    });
+    sendTurn(action.turnType, action.details ?? {});
+  }, [diceDetails, gameState.players, isMyTurn, sendTurn, user]);
+
+  const turnSecondsLeft = useCountdown(
+    isMyTurn && bothReadyToPlay && currentModal === null && forcedWinnerId == null && !waitingForOpponentRound,
+    `${gameState.currentPlayerId}-${gameState.round}-${bothReadyToPlay ? 'ready' : 'wait'}`,
+    passTurnByTimeout,
+    { paused: opponentAway },
+  );
+  const roundSecondsLeft = useCountdown(
+    currentModal === 'ROUND',
+    gameState.round,
+    finishRoundByTimeout,
+  );
+  const resultSecondsLeft = useCountdown(
+    currentModal === 'GAME',
+    forcedWinnerId ?? winnerId ?? 'result',
+    leaveMatch,
+  );
 
 
 
- const handlePlayToken = useCallback((token: TokensTypes) => {
-   console.log('[Game] play token:', token);
 
-   // Передаем на верхний уровень для обновления состояния
-   onPlayToken?.(token);
-
-   // Отправка хода на сервер
-   if (client && user) {
-     client.publish({
-       destination: `/app/input/session/${roomState.id}/turn`,
-       body: JSON.stringify({
-         sessionId: roomState.id,
-         playerId: user.id,
-         turnType: 'PLAY_TOKEN',
-         details: { token },
-       }),
-     });
-   }
- }, [client, roomState, user?.id, onPlayToken]);
-
-
-
-
-
-useEffect(() => {
-  console.log('[Game] myTokens updated:', myTokens);
-}, [myTokens]);
-
-
-
-  // Определяем, какие карты показать в модалке
   useEffect(() => {
     const playerIndex = gameState.players[0].playerId === user?.id ? 0 : 1;
     if (gameState.players[playerIndex].bloodCards.length > 1) {
@@ -129,19 +232,120 @@ useEffect(() => {
     }
   }, [gameState, user?.id]);
 
-  // Показ модалки раунда
+  // Новое окно результата — только когда сменился номер раунда.
+  const roundNumber = roundResult?.round;
   useEffect(() => {
-    if (roundResult) {
-      setCurrentModal('ROUND');
+    if (roundNumber == null || roundDecidedRef.current) {
+      return;
     }
-  }, [roundResult]);
+    roundClosedRef.current = false;
+    opponentClosedRef.current = false;
+    roundTimedOutRef.current = false;
+    opponentTimedOutRef.current = false;
+    setMyRoundClosed(false);
+    setOpponentClosedRound(false);
+    setWaitingForOpponentRound(false);
+    setMatchDraw(false);
+    setCurrentModal('ROUND');
+  }, [roundNumber]);
+
+  useEffect(() => {
+    if (!client || !user) {
+      return undefined;
+    }
+
+    const destination = `/topic/session/${roomState.id}/round-timer`;
+    let subscription: { unsubscribe: () => void } | null = null;
+    let stopped = false;
+
+    const handleMessage = (message: { body: string }) => {
+      let data: { playerId?: number | string; action?: string; round?: number | null };
+      try {
+        data = JSON.parse(message.body);
+      } catch {
+        return;
+      }
+      if (data.playerId == null || String(data.playerId) === String(user.id)) {
+        return;
+      }
+      if (data.action === 'forfeit') {
+        if (!roundDecidedRef.current && String(data.playerId) === String(opponentId)) {
+          showWinner(user.id);
+        }
+        return;
+      }
+      if (
+        data.round != null
+        && roundKeyRef.current != null
+        && Number(data.round) !== Number(roundKeyRef.current)
+      ) {
+        return;
+      }
+      if (data.action === 'closed') {
+        opponentClosedRef.current = true;
+        setOpponentClosedRound(true);
+        if (roundTimedOutRef.current) {
+          roundDecidedRef.current = true;
+          setMatchDraw(false);
+          setWaitingForOpponentRound(false);
+          setForcedWinnerId(Number(data.playerId));
+          setCurrentModal('GAME');
+          return;
+        }
+        if (roundClosedRef.current) {
+          setWaitingForOpponentRound(false);
+        }
+        return;
+      }
+      if (data.action !== 'timeout') {
+        return;
+      }
+      if (roundDecidedRef.current) {
+        return;
+      }
+      opponentTimedOutRef.current = true;
+      if (roundClosedRef.current) {
+        roundDecidedRef.current = true;
+        setWaitingForOpponentRound(false);
+        setForcedWinnerId(user.id);
+        setCurrentModal('GAME');
+        return;
+      }
+      if (roundTimedOutRef.current) {
+        showDraw();
+      }
+    };
+
+    const listen = () => {
+      if (stopped || !client.connected || subscription) {
+        return;
+      }
+      subscription = client.subscribe(destination, handleMessage);
+    };
+
+    listen();
+    const previousOnConnect = client.onConnect;
+    client.onConnect = (frame) => {
+      previousOnConnect?.(frame);
+      listen();
+    };
+
+    return () => {
+      stopped = true;
+      subscription?.unsubscribe();
+      client.onConnect = previousOnConnect;
+    };
+  }, [client, opponentId, roomState.id, showDraw, showWinner, user]);
 
   // Показ модалки игры, если победитель есть и нет открытой модалки раунда
   useEffect(() => {
-    if (winnerId && !roundResult) {
+    if ((winnerId || gameDraw) && !roundResult) {
+      if (gameDraw) {
+        setMatchDraw(true);
+      }
       setCurrentModal('GAME');
     }
-  }, [winnerId, roundResult]);
+  }, [winnerId, gameDraw, roundResult]);
 
   useEffect(() => {
     if (gameState) {
@@ -156,13 +360,47 @@ useEffect(() => {
 
   // Закрытие модалки раунда
   const handleCloseRoundModal = () => {
-    fetchGameState();
-    if (winnerId) {
-      setCurrentModal('GAME'); // после раунда показываем модалку игры
-    } else {
-      setCurrentModal(null);
+    if (roundDecidedRef.current) {
+      return;
     }
+    roundClosedRef.current = true;
+    setMyRoundClosed(true);
+    publishRoundAction('closed');
+    fetchGameState();
+    if (opponentTimedOutRef.current) {
+      roundDecidedRef.current = true;
+      setWaitingForOpponentRound(false);
+      setForcedWinnerId(user.id);
+      setCurrentModal('GAME');
+      return;
+    }
+    if (winnerId || forcedWinnerId || gameDraw) {
+      if (gameDraw) {
+        setMatchDraw(true);
+      }
+      setWaitingForOpponentRound(false);
+      setCurrentModal('GAME');
+      return;
+    }
+    setCurrentModal(null);
+    setWaitingForOpponentRound(!opponentClosedRef.current);
   };
+
+  const actionsBlocked = !bothReadyToPlay || currentModal !== null || opponentAway
+    || Boolean(diceDetails || modalCards) || waitingForOpponentRound;
+  const canAct = isMyTurn && !actionsBlocked && client.connected;
+  const visibleTurnSeconds = isMyTurn && bothReadyToPlay && currentModal === null && forcedWinnerId == null
+    ? turnSecondsLeft
+    : undefined;
+
+  useEffect(() => {
+    if (actionsBlocked) {
+      setRulesOpen(false);
+    }
+  }, [actionsBlocked]);
+
+  const shownWinnerId = forcedWinnerId ?? winnerId ?? null;
+  const resultIsDraw = forcedWinnerId == null && (matchDraw || gameDraw);
 
   return (
     <>
@@ -171,20 +409,40 @@ useEffect(() => {
         <GameRoundResultModal
           roundResult={roundResult}
           roomState={roomState}
+          secondsLeft={roundSecondsLeft}
           onClose={handleCloseRoundModal}
         />
       )}
 
       {/* Модалка результатов игры */}
-      {currentModal === 'GAME' && (
+      {currentModal === 'GAME' && (resultIsDraw || shownWinnerId != null) && (
         <GameResultModal
-          winnerId={winnerId!}
-          onClose={() => navigate(getRouteMain())}
+          winnerId={resultIsDraw ? null : shownWinnerId}
+          draw={resultIsDraw}
+          secondsLeft={resultSecondsLeft}
+          onClose={leaveMatch}
         />
       )}
 
+      {opponentAway && currentModal !== 'GAME' && (
+        <div className={cls.waitScreen}>
+          <div className={cls.loader}>
+            Соперник вышел, ожидаем возвращения
+            <CountdownTimer secondsLeft={returnSecondsLeft} caption="на возвращение" />
+          </div>
+        </div>
+      )}
+
+      {waitingForOpponentRound && currentModal === null && !opponentAway && (
+        <div className={cls.waitScreen}>
+          <div className={cls.loader}>Ждем действий соперника</div>
+        </div>
+      )}
+
+      {!waitingForOpponentRound && (
+      <>
       {/* Модалка карт */}
-      {modalCards && (
+      {currentModal !== 'GAME' && modalCards && (
         <GameCardModal
           cards={modalCards.cards}
           sendTurn={sendTurn}
@@ -193,7 +451,7 @@ useEffect(() => {
       )}
 
       {/* Модалка кубиков */}
-      {diceDetails && (
+      {currentModal !== 'GAME' && diceDetails && (
         <GameDiceModal
           first={diceDetails.first}
           second={diceDetails.second}
@@ -201,31 +459,47 @@ useEffect(() => {
         />
       )}
 
-      {/* Основной интерфейс игры */}
-      <div className={classNames(cls.container, {}, [])}>
+      <div className={`${hud.panel} ${cls.board}`}>
         <GameHeader
           opponent={opponent}
-          isCurentTurn={opponent?.id === gameState.currentPlayerId}
-          gameState={gameState}
-          selectedTokens={(opponent?.id === user?.id ? myTokens : (gameState.players[playerIndex] as any).selectedTokens) || []}
+          player={opponentPlayer}
+          isCurrentTurn={opponentId === gameState.currentPlayerId}
+          tokensLeft={hiddenTokensLeft}
+          roomId={roomState.id}
+          round={gameState.round}
+          turnSecondsLeft={visibleTurnSeconds}
         />
 
         <GameTable
           gameState={gameState}
+          player={player}
+          opponent={opponentPlayer}
+          playerName={user?.username ?? 'Вы'}
+          opponentName={opponent?.username ?? 'Соперник'}
+          canDraw={canAct}
           sendTurn={sendTurn}
-          userId={user?.id!}
         />
 
         <GameFooter
-          user={user!}
-          isCurentTurn={user?.id === gameState.currentPlayerId}
-          gameState={gameState}
-          sendTurn={sendTurn}
-          leaveCurrentRoom={leaveCurrentRoom}
-          selectedTokens={myTokens as any}
-          onPlayToken={handlePlayToken}
+          user={user ?? null}
+          player={player}
+          canAct={canAct}
+          selectedTokens={myTokens}
+          onPass={() => sendTurn('PASS')}
+          onSurrender={client.connected && opponentId != null ? handleSurrender : undefined}
+          onShowRules={() => setRulesOpen(true)}
+          onPlayToken={(token) => sendTurn('PLAY_TOKEN', { token })}
         />
+
+        {rulesOpen && !actionsBlocked && (
+          <GameRulesDialog
+            onClose={() => setRulesOpen(false)}
+            turnSecondsLeft={visibleTurnSeconds}
+          />
+        )}
       </div>
+      </>
+      )}
     </>
   );
 });
