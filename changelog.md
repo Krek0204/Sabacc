@@ -7,6 +7,11 @@
 
 ### Added
 
+- Добавлена конфигурация небольшого учебного сервера: frontend внутри образа Nginx,
+  ожидание готовности сервисов, лимиты ресурсов, ротация логов, инструкция по HTTPS,
+  бэкапу и откату; скрипт сбора CPU/RAM с отчётом для девопса
+  ([SCRUM-33](https://isa-sabacc.atlassian.net/browse/SCRUM-33)).
+
 - Добавлен базовый GitHub Actions CI: frontend lint, проверка формата заголовка PR
   и актуальности ветки относительно `main`
   ([SCRUM-25](https://isa-sabacc.atlassian.net/browse/SCRUM-25)).
@@ -28,6 +33,10 @@
   ([SCRUM-25](https://isa-sabacc.atlassian.net/browse/SCRUM-25)).
 
 ### Fixed
+
+- Prod-origin REST и WebSocket задаётся через `APP_ORIGIN` вместо старого IP;
+  Nginx сохраняет игровые соединения при длительном ожидании хода
+  ([SCRUM-33](https://isa-sabacc.atlassian.net/browse/SCRUM-33)).
 
 - При поиске и фильтрации комнат без совпадений отображается «Комнаты не найдены»;
   поиск учитывает ID комнаты и соперника. Состояния загрузки, ошибки и пустого

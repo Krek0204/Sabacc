@@ -1,5 +1,5 @@
 # 1️⃣ Сборка фронта
-FROM node:lts-alpine3.20 AS build
+FROM node:22-alpine AS build
 WORKDIR /app
 
 ARG VITE_API_URL
@@ -10,8 +10,12 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-# 2️⃣ Только билд без nginx
-FROM alpine:3.20
+# Серверный образ: статика внутри образа, Node.js в runtime не нужен.
+FROM nginx:stable-alpine AS runtime
+COPY --from=build /app/dist /usr/share/nginx/html
+
+# Локальный Compose сохраняет прежний build-only target.
+FROM alpine:3.20 AS export
 WORKDIR /app
 COPY --from=build /app/dist /dist
 

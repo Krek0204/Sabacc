@@ -37,7 +37,7 @@
 cp .env.example .env
 ```
 
-Для локального Docker оставьте `PUBLIC_IP=localhost`. Пароль из примера годится только для разработки.
+Для локального Docker оставьте `APP_ORIGIN=http://localhost`. Пароль из примера годится только для разработки.
 
 ### 2. Сборка frontend на хосте
 
@@ -91,7 +91,7 @@ prometheus.yml
 
 | Ключ | Назначение |
 | --- | --- |
-| `PUBLIC_IP` | Передаётся backend; текущие origins в YAML автоматически не заменяет |
+| `APP_ORIGIN` | Разрешённый origin браузера для REST/WebSocket, включая протокол и порт |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | Доступ к PostgreSQL |
 | `VITE_API_URL` | Префикс API при сборке frontend (`/api`) |
 | `CRON_USER_CLEANUP` | Cron-выражение очистки анонимных пользователей |
@@ -99,11 +99,15 @@ prometheus.yml
 
 Файл `.env` в git не попадает. В репозитории только `.env.example`.
 
-## Что нужно сменить при своём деплое
+## Серверный деплой
 
-В `backend/src/main/resources/application-prod.yml` CORS и WebSocket origins всё ещё завязаны на сервер предыдущей команды (`45.89.66.57`). Перед выкладкой замените их на ваш IP или домен.
+Для небольшого учебного сервера подготовлен отдельный `docker-compose.deploy.yaml`:
+три сервиса, frontend внутри Nginx-образа, проверки готовности, лимиты ресурсов
+и ротация логов. Node.js/JDK на сервере не нужны.
 
-Nginx (`app.conf`) слушает любой `server_name`.
+[Инструкция для девопса](docs/how-to/deployment.md) содержит предварительный тариф
+(2 vCPU / 4 ГБ RAM), HTTPS, запуск, бэкапы, откат и замер CPU/RAM скриптом
+`scripts/measure-resources.py`. Фактические ресурсные замеры ещё не сняты.
 
 ## Документация
 

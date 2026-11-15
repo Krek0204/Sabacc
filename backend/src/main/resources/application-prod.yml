@@ -1,26 +1,19 @@
+# Один origin с протоколом и портом, без завершающего слэша.
 server:
-  host: "45.89.66.57"
-  protocol: "http"
+  host: "${SERVER_HOST:0.0.0.0}"
+  protocol: "${SERVER_PROTOCOL:http}"
 
 websocket:
-  logging: true
+  logging: false
   stomp:
     endpoint: "/ws"
-    allowed-origin:
-      - "http://45.89.66.57"
-      - "http://localhost:5173"
-      - "http://localhost"
-    allowed-origin-patterns:
-      - "*"
+    allowed-origin: "${APP_ORIGIN:http://localhost}"
+    allowed-origin-patterns: "${APP_ORIGIN:http://localhost}"
     sock-js-enabled: true
   game:
     endpoint: "/game"
-    allowed-origin:
-      - "http://45.89.66.57"
-      - "http://localhost:5173"
-      - "http://localhost"
-    allowed-origin-patterns:
-      - "*"
+    allowed-origin: "${APP_ORIGIN:http://localhost}"
+    allowed-origin-patterns: "${APP_ORIGIN:http://localhost}"
     sock-js-enabled: true
   broker:
     destination-prefixes:
@@ -33,7 +26,13 @@ websocket:
 
 security:
   cors:
-    allowed-origin-patterns:
-      - "http://localhost:*"
-      - "http://45.89.66.57"
-    allow-credentials: true
+    allowed-origin: "${APP_ORIGIN:http://localhost}"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never

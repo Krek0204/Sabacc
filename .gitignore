@@ -66,3 +66,6 @@ bin/
 
 # Accidental files
 backend/deps.txt
+
+# Database backups
+/backups/
