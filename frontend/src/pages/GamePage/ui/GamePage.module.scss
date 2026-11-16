@@ -8,6 +8,13 @@
   text-align: center;
 }
 
+.roomNumber {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--hud-cyan);
+  font-size: 18px;
+}
+
 .tokenPanel {
   width: min(100%, 1040px);
   display: grid;
@@ -95,6 +102,19 @@
   color: var(--hud-muted);
   font-size: 12px;
   line-height: 1.3;
+}
+
+.tokenName {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tokenIcon {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  object-fit: contain;
 }
 
 .tokenAction {

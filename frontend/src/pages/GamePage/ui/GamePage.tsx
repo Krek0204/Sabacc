@@ -193,7 +193,7 @@ const GamePage = () => {
     });
   };
 
-  const waitingForPlayer = roomState?.status === 'WAITING_SECOND_USER';
+  const waitingForOpponent = roomState?.status === 'WAITING_SECOND_USER' || (isLoading && !isGameInProgress);
   const waitingForTokens = shouldShowOpponentSelectingTokens({
     status: roomState?.status,
     hasSelectedTokens: awaitingOpponentTokens,
@@ -204,7 +204,7 @@ const GamePage = () => {
   if (!client) statusMessage = 'Подключение к серверу…';
   else if (!roomState) statusMessage = 'Создание комнаты…';
   else if (waitingForTokens) statusMessage = OPPONENT_SELECTING_TOKENS_CAPTION;
-  else if (waitingForPlayer || (isLoading && !isGameInProgress)) statusMessage = 'Ожидание соперника…';
+  else if (waitingForOpponent) statusMessage = 'Ожидание соперника…';
   else if (!gameState || !hasSelectedTokens) statusMessage = 'Подготовка партии…';
 
   return (
@@ -237,7 +237,10 @@ const GamePage = () => {
                   disabled={!selected && myTokens.length >= TOKEN_HAND_SIZE}
                   onClick={() => toggleToken(type)}
                 >
-                  <span className={cls.tokenName}><span aria-hidden="true">{token.symbol}</span> {token.name}</span>
+                  <span className={cls.tokenName}>
+                    <img className={cls.tokenIcon} src={token.icon} alt="" />
+                    {token.name}
+                  </span>
                   <span className={cls.tokenDescription}>{token.description}</span>
                   <span className={cls.tokenAction} aria-hidden="true">{selected ? '− Убрать' : '+ Выбрать'}</span>
                 </button>
@@ -258,7 +261,12 @@ const GamePage = () => {
           </footer>
         </section>
       ) : statusMessage ? (
-        <p className={`${hud.panel} ${cls.loader}`} role="status">{statusMessage}</p>
+        <p className={`${hud.panel} ${cls.loader}`} role="status">
+          {waitingForOpponent && roomState?.id != null && (
+            <strong className={cls.roomNumber}>Комната {roomState.id}</strong>
+          )}
+          {statusMessage}
+        </p>
       ) : client && gameState && roomState && (
         <Game
           client={client}
