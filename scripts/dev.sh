@@ -9,7 +9,7 @@ usage() {
 Локальный Sabacc: ./scripts/dev.sh <команда>
 
   up      Подготовить .env, собрать и запустить стенд
-  build   Собрать frontend/dist и Docker-образы, без запуска
+  build   Собрать Docker-образы с сайтом и backend, без запуска
   start   Запустить ранее собранный стенд, без пересборки
   stop    Остановить контейнеры, сохранив их и данные
   down    Удалить контейнеры и сеть, сохранив postgres-data
@@ -17,7 +17,7 @@ usage() {
   logs    Показать последние 100 строк логов и следить за новыми
   help    Показать справку
 
-Нужны запущенный Docker с Compose v2 и Node.js/npm для build/up.
+Нужен запущенный Docker с Compose v2 или новее. Node.js и Java на хосте не нужны.
 Перезапуск backend прерывает активные партии. Скрипт не запускает тесты.
 EOF
 }
@@ -38,23 +38,14 @@ prepare() {
 }
 
 build() {
-  require node
-  require npm
-  printf 'Сборка frontend на хосте (статику использует Nginx)...\n'
-  (
-    cd "$ROOT/frontend"
-    npm ci --no-audit --no-fund
-    npm run build
-  )
-  printf 'Сборка Docker-образов...\n'
+  printf 'Сборка сайта и backend внутри Docker...\n'
   compose build
 }
 
 start() {
-  [[ -f frontend/dist/index.html ]] || die 'Нет frontend/dist. Сначала выполните ./scripts/dev.sh build или ./scripts/dev.sh up.'
-  compose up -d --no-build
-  compose ps -a
-  printf '\nСтенд запущен: http://localhost\nBackend может ещё инициализироваться. Проверка: curl --fail http://localhost/api/v1/room/all\nЛоги: ./scripts/dev.sh logs\n'
+  compose up -d --no-build --wait --wait-timeout 180
+  compose ps
+  printf '\nСтенд готов: http://localhost (порт HTTP_PORT из .env)\nЛоги: ./scripts/dev.sh logs\n'
 }
 
 [[ $# -le 1 ]] || { usage >&2; exit 2; }

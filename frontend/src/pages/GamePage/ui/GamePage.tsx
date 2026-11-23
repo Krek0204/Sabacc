@@ -1,3 +1,4 @@
+import { subscribeOnConnect } from '@/shared/lib/stomp/subscribeOnConnect';
 import { useEffect, useRef, useState } from 'react';
 import { useSelector } from 'react-redux';
 import { selectCurrentUser } from '@/features/Auth';
@@ -138,24 +139,19 @@ const GamePage = () => {
     };
 
     const listen = () => {
-      if (stopped || !client.connected || subscription) {
+      if (stopped || !client.connected) {
         return;
       }
       subscription = client.subscribe(destination, handleMessage);
       publishReady();
     };
 
-    listen();
-    const previousOnConnect = client.onConnect;
-    client.onConnect = (frame) => {
-      previousOnConnect?.(frame);
-      listen();
-    };
+    const stopListening = subscribeOnConnect(client, listen);
 
     return () => {
       stopped = true;
       subscription?.unsubscribe();
-      client.onConnect = previousOnConnect;
+      stopListening();
     };
   }, [client, hasSelectedTokens, playerId, roomState?.id]);
 

@@ -1,5 +1,7 @@
 package ru.ngtu.sabacc.room;
 
+import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -11,6 +13,11 @@ import java.util.Optional;
 
 @RepositoryRestResource(exported = false)
 public interface SessionRoomRepository extends JpaRepository<SessionRoom, Long> {
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select r from SessionRoom r where r.id = :id")
+    Optional<SessionRoom> findByIdForUpdate(@Param("id") Long id);
+
+
     List<SessionRoom> findAllByPlayerFirstIdOrPlayerSecondId(Long playerFirst_id, Long playerSecond_id);
     //Optional<SessionRoom> findByPlayerFirstIdAndStatusNot(Long playerId, SessionRoomStatus status);
     List<SessionRoom> findAllByPlayerFirstIdAndStatusNot(Long playerId, SessionRoomStatus status);

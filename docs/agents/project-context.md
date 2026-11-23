@@ -6,7 +6,7 @@
 
 ## Текущие ссылки
 
-- GitHub: https://github.com/Krek0204/Sabacc
+- GitHub: https://github.com/HardRandom/Sabacc
 - Базовая ветка: `main` (локальная `origin/HEAD` указывает на `origin/main`).
 - Jira: https://isa-sabacc.atlassian.net/jira/software/projects/SCRUM/boards/1
 - Ключ проекта: `SCRUM`; ссылка на задачу: `https://isa-sabacc.atlassian.net/browse/SCRUM-123`.
@@ -60,9 +60,10 @@ Kessel Sabacc — карточная игра для двух игроков. П
 - В Vite `/api` удаляется прокси, хотя сервер объявляет `/api/v1`;
   `/game` клиента отсутствует в dev proxy. Полный игровой сценарий — через Compose.
 - Полные настройки STOMP находятся в `application-prod.yml`, а не в базовом профиле.
-  Там же сохранились адреса старой команды; не используй их для нового деплоя автоматически.
+  Публичный IP задавать в коде не нужно: сайт и API работают через один Nginx.
+  Frontend собирается внутри образа nginx; локальный frontend/dist не используется.
   Пошаговый запуск на сервере: [server-deploy](../how-to/server-deploy.md).
-- Docker-сборка backend запускает `./gradlew bootJar --no-daemon` через wrapper 8.10.1;
+- Docker-сборка backend запускает `gradle bootJar --no-daemon` из образа 8.10.1 (та же версия, что у wrapper);
   эта задача не запускает тесты, её успех не подтверждает тестирование.
 - Frontend lint на существующем коде красный; см. [verification.md](verification.md).
 

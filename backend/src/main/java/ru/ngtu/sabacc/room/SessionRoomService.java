@@ -2,6 +2,7 @@ package ru.ngtu.sabacc.room;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
@@ -33,6 +34,24 @@ public class SessionRoomService {
 
     public static final Duration RECONNECT_WINDOW = Duration.ofMinutes(2);
 
+    @EventListener(ApplicationReadyEvent.class)
+    @Transactional
+    public void resetConnectionsAfterRestart() {
+        // Карты не сохраняются в БД. Старую партию после рестарта нельзя продолжать.
+        for (SessionRoom room : sessionRoomRepository.findAll()) {
+            if (room.getStatus() != SessionRoomStatus.WAITING_SECOND_USER
+                    && room.getStatus() != SessionRoomStatus.ALL_USERS_JOINED
+                    && room.getStatus() != SessionRoomStatus.FINISHED) {
+                room.setStatus(SessionRoomStatus.FINISHED);
+            }
+            room.setPlayerFirstConnected(false);
+            room.setPlayerSecondConnected(false);
+            room.setPlayerFirstLeftAt(null);
+            room.setPlayerSecondLeftAt(null);
+            sessionRoomRepository.saveAndFlush(room);
+        }
+    }
+
     @Transactional(readOnly = true)
     public List<SessionRoom> getAllRooms() {
         return sessionRoomRepository.findAll();
@@ -50,6 +69,11 @@ public class SessionRoomService {
     public SessionRoom getRoomById(Long id) {
         return sessionRoomRepository
                 .findById(id)
+                .orElseThrow(() -> new EntityNotFoundException(SessionRoom.class, id));
+    }
+
+    private SessionRoom getRoomForUpdate(Long id) {
+        return sessionRoomRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> new EntityNotFoundException(SessionRoom.class, id));
     }
 
@@ -149,7 +173,7 @@ public class SessionRoomService {
     public void joinSession(Long sessionId, Long userId) {
         log.info("User [{}] joining session [{}]", userId, sessionId);
 
-        SessionRoom sessionRoom = getRoomById(sessionId);
+        SessionRoom sessionRoom = getRoomForUpdate(sessionId);
         User user = userService.getUserById(userId);
 
         throwIfUserHaveUnfinishedSessions(userId);
@@ -183,7 +207,7 @@ public class SessionRoomService {
         log.info("User [{}] leaving session [{}]", userId, roomId);
         log.info("User leave");
 
-        SessionRoom sessionRoom = getRoomById(roomId);
+        SessionRoom sessionRoom = getRoomForUpdate(roomId);
 
         if (!roomContainsUser(sessionRoom, userId)) {
             throw new PlayerNotRelatedToSessionException(roomId, userId);
@@ -351,12 +375,12 @@ public class SessionRoomService {
 
 
     private SessionRoom switchPlayerSocketConnected(Long sessionId, Long playerId, boolean value) {
-        SessionRoom sessionRoom = sessionRoomRepository.findById(sessionId)
-                .orElseThrow(() -> new EntityNotFoundException(SessionRoom.class, sessionId));
+        SessionRoom sessionRoom = getRoomForUpdate(sessionId);
 
         User playerFirst = sessionRoom.getPlayerFirst();
         if(playerFirst.getId().equals(playerId)) {
             sessionRoom.setPlayerFirstConnected(value);
+            if (value) sessionRoom.setPlayerFirstLeftAt(null);
             sessionRoomRepository.saveAndFlush(sessionRoom);
             return sessionRoom;
         }
@@ -368,6 +392,7 @@ public class SessionRoomService {
 
         if(playerSecond.getId().equals(playerId)) {
             sessionRoom.setPlayerSecondConnected(value);
+            if (value) sessionRoom.setPlayerSecondLeftAt(null);
             sessionRoomRepository.saveAndFlush(sessionRoom);
             return sessionRoom;
         }
@@ -400,12 +425,14 @@ public class SessionRoomService {
         return sessionRoomRepository
                 .findByPlayerFirstIdOrPlayerSecondIdAndStatusNot(userId, userId, SessionRoomStatus.FINISHED)
                 .stream()
+                .filter(room -> room.getStatus() != SessionRoomStatus.FINISHED)
                 .filter(room -> canStillReturn(room, userId, now))
                 .findFirst();
     }
 
+    @Transactional
     public SessionRoom returnToSession(Long roomId, Long userId) {
-        SessionRoom room = getRoomById(roomId);
+        SessionRoom room = getRoomForUpdate(roomId);
         if (!roomContainsUser(room, userId)) {
             throw new PlayerNotRelatedToSessionException(roomId, userId);
         }
@@ -413,24 +440,8 @@ public class SessionRoomService {
             throw new JoinFinishedSessionException(userId, roomId);
         }
 
-        if (isFirst(room, userId)) {
-            room.setPlayerFirstLeftAt(null);
-            room.setPlayerFirstConnected(true);
-        } else {
-            room.setPlayerSecondLeftAt(null);
-            room.setPlayerSecondConnected(true);
-        }
-
-        boolean otherAway = otherLeftAt(room, userId) != null;
-        if (otherAway) {
-            updateSessionStatus(room, SessionRoomStatus.PLAYER_DISCONNECTED);
-            sessionRoomRepository.saveAndFlush(room);
-            return room;
-        }
-
-        updateSessionStatus(room, SessionRoomStatus.IN_PROGRESS);
-        sessionRoomRepository.saveAndFlush(room);
-        eventPublisher.publishEvent(new PlayerReconnectedSessionEvent(roomId, userId, room));
+        // HTTP-возврат не подтверждает подключение сокета и не начинает партию.
+        // Готовность обоих игроков проверяется в handlePlayerSocketConnection.
         return room;
     }
 

@@ -5,3 +5,7 @@ out
 .env.*
 !.env.example
 *.log
+
+AGENTS.md
+README.md
+src/test

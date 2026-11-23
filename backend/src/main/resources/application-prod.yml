@@ -1,26 +1,14 @@
-server:
-  host: "45.89.66.57"
-  protocol: "http"
-
 websocket:
   logging: true
   stomp:
     endpoint: "/ws"
-    allowed-origin:
-      - "http://45.89.66.57"
-      - "http://localhost:5173"
-      - "http://localhost"
-    allowed-origin-patterns:
-      - "*"
+    allowed-origin: []
+    allowed-origin-patterns: []
     sock-js-enabled: true
   game:
     endpoint: "/game"
-    allowed-origin:
-      - "http://45.89.66.57"
-      - "http://localhost:5173"
-      - "http://localhost"
-    allowed-origin-patterns:
-      - "*"
+    allowed-origin: []
+    allowed-origin-patterns: []
     sock-js-enabled: true
   broker:
     destination-prefixes:
@@ -30,10 +18,3 @@ websocket:
     application-destination-prefixes:
       - "/app"
     user-destination-prefixes: "/user"
-
-security:
-  cors:
-    allowed-origin-patterns:
-      - "http://localhost:*"
-      - "http://45.89.66.57"
-    allow-credentials: true

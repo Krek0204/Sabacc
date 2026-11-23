@@ -17,7 +17,8 @@
 
 ## Быстрый старт
 
-Нужны Docker Desktop, Node.js 18+ и свободный порт **80**.
+Нужны Git, Docker Desktop либо Docker Engine с Compose v2+ и свободный порт **80**.
+Node.js, Java и PostgreSQL для полного Docker-запуска на хост не устанавливаются.
 
 Самый короткий путь — из корня репозитория:
 
@@ -37,28 +38,18 @@
 cp .env.example .env
 ```
 
-Для локального Docker оставьте `PUBLIC_IP=localhost`. Пароль из примера годится только для разработки.
+Пароль PostgreSQL из примера годится для локального теста. На сервере замените его до первого запуска новой БД. Публичный IP в конфигурации указывать не нужно.
 
-### 2. Сборка frontend на хосте
+### 2. Сборка и запуск стека
 
-Nginx отдаёт статику из `./frontend/dist` на вашей машине, а не из Docker-образа frontend. Сначала:
-
-```bash
-cd frontend
-npm ci
-npm run build
-cd ..
+```sh
+docker compose --env-file .env up -d --build --wait --wait-timeout 180
+docker compose --env-file .env ps
 ```
 
-`npm ci` берёт версии из `package-lock.json`. Без него `npx tsc` может подтянуть несовместимый TypeScript и сборка упадёт.
-
-### 3. Запуск стека
-
-```bash
-docker compose --env-file .env up --build
-```
-
-Первая сборка backend в Docker занимает несколько минут. Контейнер `sabacc_frontend` сразу завершается с кодом 0 — так и задумано: он только собирает образ, игру отдаёт Nginx.
+Docker собирает frontend по package-lock.json и включает его в образ Nginx.
+Отдельный frontend/dist на хосте не нужен. PostgreSQL запускается автоматически,
+backend ждёт готовности БД, Nginx — backend. Первая сборка занимает несколько минут.
 
 После старта:
 
@@ -91,7 +82,7 @@ prometheus.yml
 
 | Ключ | Назначение |
 | --- | --- |
-| `PUBLIC_IP` | Передаётся backend; текущие origins в YAML автоматически не заменяет |
+| `HTTP_PORT` | Внешний HTTP-порт; по умолчанию 80 |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | Доступ к PostgreSQL |
 | `VITE_API_URL` | Префикс API при сборке frontend (`/api`) |
 | `CRON_USER_CLEANUP` | Cron-выражение очистки анонимных пользователей |
@@ -104,10 +95,9 @@ prometheus.yml
 Тот же Compose можно поднять на Linux с открытым портом 80. Пошагово:
 [docs/how-to/server-deploy.md](docs/how-to/server-deploy.md).
 
-Руководства devops прошлой команды в репозитории нет. IP `45.89.66.57` и образы
-Docker Hub из `Project.md` — исторические. Перед сборкой замените этот адрес
-в `backend/src/main/resources/application-prod.yml`. Переменная `PUBLIC_IP`
-сама origins не подставляет. Nginx (`app.conf`) слушает любой `server_name`.
+Адрес для игроков — http://<публичный-IP>/ (TCP 80 должен быть открыт у провайдера
+и на сервере). Вписывать адрес в frontend/backend не требуется.
+Исторические IP и образы из Project.md для этой установки не используются.
 
 ## Документация
 

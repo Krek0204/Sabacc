@@ -6,33 +6,29 @@ export const useWebSocketGame = (playerId: number | undefined, sessionId: number
   const [client, setClient] = useState<Client | null>(null);
 
   useEffect(() => {
-    if (!playerId || !sessionId) return;
+    if (playerId == null || sessionId == null) return;
 
-    console.log('Создание сокета');
     const socketUrl = `/game?playerId=${playerId}&sessionId=${sessionId}`;
-    console.log('Создание сокета. URL SockJS:', socketUrl);
-    const socket = new SockJS(socketUrl);
-
     const stompClient = new Client({
-          webSocketFactory: () => {
-            console.log('STOMP WebSocket factory called. SockJS object:', socket);
-            return socket;
-          },
-          heartbeatIncoming: 10000,
-          heartbeatOutgoing: 10000,
-          debug: (msg) => console.log('STOMP debug:', msg), // лог всех handshake/сообщений
-          onConnect: () => console.log('WebSocket connected'),
-          onDisconnect: () => console.log('WebSocket disconnected'),
-          onStompError: (frame) => console.error('WebSocket error:', frame),
-        });
+      webSocketFactory: () => new SockJS(socketUrl),
+      reconnectDelay: 2000,
+      heartbeatIncoming: 10000,
+      heartbeatOutgoing: 10000,
+      onStompError: (frame) => console.error('Ошибка игрового соединения:', frame.headers.message),
+    });
 
-    stompClient.activate();
     setClient(stompClient);
-
+    stompClient.activate();
+    const onPageHide = () => { void stompClient.deactivate({ force: true }); };
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) stompClient.activate();
+    };
+    window.addEventListener('pagehide', onPageHide);
+    window.addEventListener('pageshow', onPageShow);
     return () => {
-      if (stompClient) {
-        stompClient.deactivate();
-      }
+      window.removeEventListener('pagehide', onPageHide);
+      window.removeEventListener('pageshow', onPageShow);
+      void stompClient.deactivate();
     };
   }, [playerId, sessionId]);
 

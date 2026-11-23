@@ -10,7 +10,7 @@ docker compose --env-file .env ps -a
 docker compose --env-file .env logs --tail=100 nginx backend postgres
 ```
 
-Проверь свободный порт 80, наличие `frontend/dist/index.html`, готовность БД и backend.
+Проверь свободный порт 80, актуальность образа nginx, готовность БД и backend.
 Frontend-контейнер с кодом 0 не обслуживает HTTP и сам по себе не является ошибкой.
 Compose не ждёт healthcheck PostgreSQL перед стартом backend; по логам отдели
 ещё не готовую БД от неправильных реквизитов или ошибки приложения.
@@ -40,13 +40,13 @@ Gradle не читает корневой `.env`. Проверь `CRON_USER_CLEA
 
 ## Сборка проходит, но поведение не проверено
 
-Dockerfile backend выполняет `./gradlew bootJar --no-daemon`, без запуска тестов. `GameSessionTest.kt` закомментирован.
+Dockerfile backend выполняет `gradle bootJar --no-daemon` (версия 8.10.1, как у wrapper), без запуска тестов. `GameSessionTest.kt` закомментирован.
 Spring context test требует окружения, а существующие frontend-тесты не покрывают партию.
 Используй [команды и ручной сценарий](../agents/verification.md), указывая реальные результаты.
 
 ## Изменение .env не влияет на приложение
 
 Различай конфигурацию Compose, Spring и время сборки frontend.
-Статика требует пересборки. PUBLIC_IP не связан с origins в текущем YAML,
+Статика требует пересборки образа nginx. IP в сборке больше не фиксируется,
 а профиль prod зафиксирован непосредственно в Compose.
 Подробности — в [инструкции запуска](local-setup.md).

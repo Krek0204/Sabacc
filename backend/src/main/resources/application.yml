@@ -29,6 +29,6 @@ security:
 
 websocket:
   stomp:
-    allowed-origin-patterns: ["*"]
+    allowed-origin-patterns: []
   game:
-    allowed-origin-patterns: ["*"]
+    allowed-origin-patterns: []

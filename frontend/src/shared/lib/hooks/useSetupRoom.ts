@@ -160,17 +160,16 @@ export async function setupSessionRoom(playerId: number): Promise<number | undef
   return undefined;
 }
 
-export const useSetupRoom = (playerId: number) => {
+export const useSetupRoom = (playerId: number | undefined) => {
   const [sessionId, setSessionId] = useState<number | undefined>(undefined);
 
   useEffect(() => {
-    if (!playerId) return;
-
+    if (playerId == null) return;
+    let cancelled = false;
     setupSessionRoom(playerId).then((id) => {
-      if (id !== undefined) {
-        setSessionId(id);
-      }
+      if (!cancelled && id !== undefined) setSessionId(id);
     });
+    return () => { cancelled = true; };
   }, [playerId]);
 
   return sessionId;
