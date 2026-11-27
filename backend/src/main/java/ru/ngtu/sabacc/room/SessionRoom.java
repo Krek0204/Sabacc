@@ -42,6 +42,16 @@ public class SessionRoom extends BaseEntity {
     @Column(name = "player_second_left_at")
     private Instant playerSecondLeftAt;
 
+    @Column(nullable = false)
+    @Builder.Default
+    private int matchNumber = 1;
+
+    @Column(nullable = false)
+    private boolean playerFirstReadyForRematch;
+
+    @Column(nullable = false)
+    private boolean playerSecondReadyForRematch;
+
     @Override
     public String toString() {
         return "SessionRoom{" +

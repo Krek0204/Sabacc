@@ -8,6 +8,18 @@
   text-align: center;
 }
 
+.cancelMatchmaking {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.waitingTimer {
+  display: block;
+  margin-top: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
 .roomNumber {
   display: block;
   margin-bottom: 4px;

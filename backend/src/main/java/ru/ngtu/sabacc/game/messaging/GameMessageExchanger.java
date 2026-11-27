@@ -54,12 +54,12 @@ public class GameMessageExchanger implements IGameMessageExchanger {
 
     @Override
     public void sendGameFinished(GameFinishDto finishDto, IGameSession sender) {
+        eventPublisher.publishEvent(new SessionFinishedEvent(sender.getSessionId()));
         socketMessageSender.sendMessageSessionBroadcast(
                 sender.getSessionId(),
                 WS_GAME_RESULTS_QUEUE,
                 finishDto
         );
-        eventPublisher.publishEvent(new SessionFinishedEvent(sender.getSessionId()));
     }
 
     @EventListener

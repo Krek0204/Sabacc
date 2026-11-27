@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.event.TransactionalEventListener;
 import ru.ngtu.sabacc.game.messaging.IGameMessageExchanger;
 import ru.ngtu.sabacc.game.messaging.IGameSession;
 import ru.ngtu.sabacc.game.messaging.dto.GameProgressDto;
@@ -38,8 +39,11 @@ public class GameSessionService {
     private final ApplicationEventPublisher eventPublisher;
 
     public GameStateDto getCurrentGameState(Long sessionId) {
-        checkIfSessionExists(sessionId);
-        return activeSessions.get(sessionId).getCurrentState();
+        IGameSession session = activeSessions.get(sessionId);
+        if (session == null) {
+            throw new GameSessionNotFoundException(sessionId);
+        }
+        return session.getCurrentState();
     }
 
     public void makeTurn(TurnDto turnDTO) {
@@ -71,17 +75,16 @@ public class GameSessionService {
         log.info("Session [{}] is ready. Initializing game session...", sessionId);
         createSession(sessionId, sessionRoom.getPlayerFirst().getId(), sessionRoom.getPlayerSecond().getId());
         startSession(sessionId);
-        socketMessageSender.sendMessageSessionBroadcast(
-                sessionId,
-                WS_GAME_PROGRESS_QUEUE,
-                GameProgressDto
-                        .builder()
-                        .status(GameProgressStatus.STARTED)
-                        .details(Map.of("sessionRoom", sessionRoom))
-                        .build()
-        );
-
         eventPublisher.publishEvent(new SessionStartedEvent(sessionId));
+    }
+
+    @TransactionalEventListener(fallbackExecution = true)
+    void broadcastSessionStarted(SessionStartedEvent event) {
+        socketMessageSender.sendMessageSessionBroadcast(
+                event.sessionId(),
+                WS_GAME_PROGRESS_QUEUE,
+                GameProgressDto.builder().status(GameProgressStatus.STARTED).build()
+        );
     }
 
     @EventListener(PlayerDisconnectedSessionEvent.class)

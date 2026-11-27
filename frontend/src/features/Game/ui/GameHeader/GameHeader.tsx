@@ -2,7 +2,6 @@
 import { GameCard, GameCardType } from '@/entities/GameCard';
 import { User } from '@/features/Auth/model/types/auth';
 import { formatSelectionCountdown } from '@/shared/lib/countdown/countdown';
-import hud from '@/shared/ui/Hud/Hud.module.scss';
 import { TOKEN_HAND_SIZE } from '../../model/opponentTokensLeft';
 import { Player } from '../../model/types/game';
 import cls from './GameHeader.module.scss';
@@ -14,11 +13,12 @@ interface GameHeaderProps {
   tokensLeft: number;
   roomId: number;
   round: number;
+  turnOwner?: 'self' | 'opponent';
   turnSecondsLeft?: number;
 }
 
 export const GameHeader = ({
-  opponent, player, isCurrentTurn, tokensLeft, roomId, round, turnSecondsLeft,
+  opponent, player, isCurrentTurn, tokensLeft, roomId, round, turnOwner, turnSecondsLeft,
 }: GameHeaderProps) => (
   <header className={cls.header}>
     <div className={cls.opponent}>
@@ -46,8 +46,13 @@ export const GameHeader = ({
     </div>
 
     <div className={cls.status}>
-      {turnSecondsLeft != null && (
-        <span className={hud.pill}>⏱ Ваш ход {formatSelectionCountdown(turnSecondsLeft)}</span>
+      {turnOwner && (
+        <div className={cls.turnIndicator} data-owner={turnOwner}>
+          <strong role="status">{turnOwner === 'self' ? 'Ваш ход' : 'Ход соперника'}</strong>
+          {turnSecondsLeft != null && (
+            <span className={cls.turnTime} role="timer">{formatSelectionCountdown(turnSecondsLeft)}</span>
+          )}
+        </div>
       )}
       <div className={cls.badge}>
         <span className={cls.label}>Комната {roomId}</span>

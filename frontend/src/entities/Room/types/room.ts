@@ -3,6 +3,9 @@ import { GameStatus } from "@/features/Game/model/types/game";
 
 export interface RoomState {
   id: number;
+  matchNumber: number;
+  playerFirstReadyForRematch: boolean;
+  playerSecondReadyForRematch: boolean;
   status: GameStatus;
   playerFirst: User | null;
   playerSecond: User | null;

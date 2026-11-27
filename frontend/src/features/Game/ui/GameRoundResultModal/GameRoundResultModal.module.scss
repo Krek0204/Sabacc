@@ -92,6 +92,18 @@
   }
 }
 
+.container[data-result='winner'] .nickname {
+  border-color: #86efac;
+  color: #bbf7d0;
+  background: #123629;
+}
+
+.container[data-result='loser'] .nickname {
+  border-color: #fca5a5;
+  color: #fecaca;
+  background: #411e2a;
+}
+
 .imgContainer {
   display: flex;
   flex-direction: row;

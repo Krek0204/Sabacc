@@ -8,7 +8,7 @@ import { CountdownTimer } from '@/shared/ui/CountdownTimer';
 import { selectCurrentUser } from '@/features/Auth';
 import { GameHeader } from '../GameHeader/GameHeader';
 import { GameFooter } from '../GameFooter/GameFooter';
-import { Card, GameState, TokensTypes } from '../../model/types/game';
+import { Card, GameState, GameStatus, TokensTypes } from '../../model/types/game';
 import cls from './Game.module.scss';
 import { useOpponent } from '@/shared/lib/hooks/useOpponent';
 import { RoomState } from '@/entities/Room/types/room';
@@ -52,12 +52,14 @@ interface GameProps {
   gameState: GameState;
   roomState: RoomState;
   diceDetails: { first: number; second: number } | null;
+  opponentTurnNotice: string | null;
   handleDiceSelection: (index: number) => void;
   winnerId: number | null;
   gameDraw?: boolean;
   roundResult: any | null;
   leaveCurrentRoom: any;
   finishLeave?: () => void;
+  requestRematch: () => Promise<void>;
   fetchGameState: any;
 
   myTokens: TokensTypes[];
@@ -68,12 +70,14 @@ export const Game = memo(({
   gameState,
   roomState,
   diceDetails,
+  opponentTurnNotice,
   handleDiceSelection,
   winnerId,
   gameDraw = false,
   roundResult,
   leaveCurrentRoom,
   finishLeave,
+  requestRematch,
   fetchGameState,
   myTokens,
 }: GameProps) => {
@@ -84,6 +88,8 @@ export const Game = memo(({
   const playerIndex = gameState.players[0].playerId === user?.id ? 0 : 1;
   const player = gameState.players[playerIndex];
   const opponentPlayer = gameState.players.find((item) => item.playerId !== user?.id);
+  const [rematchPending, setRematchPending] = useState(false);
+  const [rematchError, setRematchError] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [modalCards, setModalCards] = useState<{ cards: Card[], type: GameCardType } | null>(null);
 
@@ -175,6 +181,10 @@ export const Game = memo(({
     if (roundClosedRef.current || roundDecidedRef.current) {
       return;
     }
+    if (winnerId != null || gameDraw) {
+      setCurrentModal('GAME');
+      return;
+    }
     roundTimedOutRef.current = true;
     publishRoundAction('timeout');
     if (opponentClosedRef.current && opponentId != null) {
@@ -187,7 +197,7 @@ export const Game = memo(({
     }
     // Соперник «Закрыть» не присылал: к концу таймера кнопку не нажал никто.
     showDraw();
-  }, [opponentId, publishRoundAction, showDraw]);
+  }, [gameDraw, opponentId, publishRoundAction, showDraw, winnerId]);
 
   const passTurnByTimeout = useCallback(() => {
     if (!isMyTurn || !user) {
@@ -199,7 +209,7 @@ export const Game = memo(({
       sandCount: me?.sandCards.length ?? 0,
       bloodCount: me?.bloodCards.length ?? 0,
     });
-    sendTurn(action.turnType, action.details ?? {});
+    sendTurn(action.turnType, action.turnType === 'PASS' ? { timedOut: true } : action.details ?? {});
   }, [diceDetails, gameState.players, isMyTurn, sendTurn, user]);
 
   const turnSecondsLeft = useCountdown(
@@ -208,11 +218,68 @@ export const Game = memo(({
     passTurnByTimeout,
     { paused: opponentAway },
   );
+  const [opponentTurnSeconds, setOpponentTurnSeconds] = useState<{ round: number; seconds: number } | null>(null);
+  const timerDestination = `/topic/session/${roomState.id}/round-timer`;
+  const turnTimerVisible = bothReadyToPlay && currentModal === null && forcedWinnerId == null
+    && !waitingForOpponentRound && winnerId == null && !gameDraw && !opponentAway;
+
+  useEffect(() => {
+    if (isMyTurn || !turnTimerVisible) {
+      setOpponentTurnSeconds(null);
+    }
+  }, [isMyTurn, turnTimerVisible]);
+
+  useEffect(() => {
+    if (!isMyTurn || !turnTimerVisible || !user) {
+      return undefined;
+    }
+    return subscribeOnConnect(client, () => {
+      client.publish({
+        destination: timerDestination,
+        body: JSON.stringify({
+          action: 'turn-countdown',
+          playerId: user.id,
+          round: gameState.round,
+          seconds: turnSecondsLeft,
+        }),
+      });
+    });
+  }, [client, gameState.round, isMyTurn, timerDestination, turnSecondsLeft, turnTimerVisible, user]);
+
   const roundSecondsLeft = useCountdown(
     currentModal === 'ROUND',
     gameState.round,
     finishRoundByTimeout,
   );
+  const isFirstInRoom = roomState.playerFirst?.id === user?.id;
+  const readyForRematch = isFirstInRoom
+    ? roomState.playerFirstReadyForRematch : roomState.playerSecondReadyForRematch;
+  const opponentReadyForRematch = isFirstInRoom
+    ? roomState.playerSecondReadyForRematch : roomState.playerFirstReadyForRematch;
+  const canRematch = roomState.status === GameStatus.FINISHED && Boolean(roomState.playerSecond)
+    && roomState.playerFirstConnected && roomState.playerSecondConnected;
+
+  let rematchStatus: string | undefined;
+  if (readyForRematch) {
+    rematchStatus = canRematch ? 'Ждём подтверждения соперника…' : 'Реванш недоступен.';
+  } else if (rematchError) {
+    rematchStatus = 'Не удалось отправить запрос на реванш.';
+  } else if (canRematch && opponentReadyForRematch) {
+    rematchStatus = 'Соперник предлагает реванш.';
+  }
+
+  const handleRematch = async () => {
+    setRematchPending(true);
+    setRematchError(false);
+    try {
+      await requestRematch();
+    } catch {
+      setRematchError(true);
+    } finally {
+      setRematchPending(false);
+    }
+  };
+
   const resultSecondsLeft = useCountdown(
     currentModal === 'GAME',
     forcedWinnerId ?? winnerId ?? 'result',
@@ -255,18 +322,24 @@ export const Game = memo(({
       return undefined;
     }
 
-    const destination = `/topic/session/${roomState.id}/round-timer`;
     let subscription: { unsubscribe: () => void } | null = null;
     let stopped = false;
 
     const handleMessage = (message: { body: string }) => {
-      let data: { playerId?: number | string; action?: string; round?: number | null };
+      let data: { playerId?: number | string; action?: string; round?: number | null; seconds?: number };
       try {
         data = JSON.parse(message.body);
       } catch {
         return;
       }
-      if (data.playerId == null || String(data.playerId) === String(user.id)) {
+      if (data?.playerId == null || String(data.playerId) === String(user.id)) {
+        return;
+      }
+      if (data.action === 'turn-countdown') {
+        if (String(data.playerId) === String(opponentId) && typeof data.round === 'number'
+          && typeof data.seconds === 'number' && Number.isInteger(data.seconds) && data.seconds >= 0) {
+          setOpponentTurnSeconds({ round: data.round, seconds: data.seconds });
+        }
         return;
       }
       if (data.action === 'forfeit') {
@@ -321,7 +394,7 @@ export const Game = memo(({
       if (stopped || !client.connected) {
         return;
       }
-      subscription = client.subscribe(destination, handleMessage);
+      subscription = client.subscribe(timerDestination, handleMessage);
     };
 
     const stopListening = subscribeOnConnect(client, listen);
@@ -331,11 +404,12 @@ export const Game = memo(({
       subscription?.unsubscribe();
       stopListening();
     };
-  }, [client, opponentId, roomState.id, showDraw, showWinner, user]);
+  }, [client, opponentId, showDraw, showWinner, timerDestination, user]);
 
   // Показ модалки игры, если победитель есть и нет открытой модалки раунда
   useEffect(() => {
-    if ((winnerId || gameDraw) && !roundResult) {
+    if ((winnerId != null || gameDraw) && (!roundResult || roundClosedRef.current)) {
+      setWaitingForOpponentRound(false);
       if (gameDraw) {
         setMatchDraw(true);
       }
@@ -400,6 +474,7 @@ export const Game = memo(({
 
   return (
     <>
+      <div className={cls.turnNotice} role="status">{opponentTurnNotice}</div>
       {/* Модалка раунда */}
       {currentModal === 'ROUND' && (
         <GameRoundResultModal
@@ -417,6 +492,9 @@ export const Game = memo(({
           draw={resultIsDraw}
           secondsLeft={resultSecondsLeft}
           onClose={leaveMatch}
+          onRematch={canRematch ? handleRematch : undefined}
+          rematchDisabled={rematchPending || readyForRematch}
+          rematchStatus={rematchStatus}
         />
       )}
 
@@ -463,7 +541,12 @@ export const Game = memo(({
           tokensLeft={hiddenTokensLeft}
           roomId={roomState.id}
           round={gameState.round}
-          turnSecondsLeft={visibleTurnSeconds}
+          turnOwner={turnTimerVisible
+            ? (isMyTurn ? 'self' : opponentId === gameState.currentPlayerId ? 'opponent' : undefined)
+            : undefined}
+          turnSecondsLeft={turnTimerVisible && !isMyTurn
+            ? (opponentTurnSeconds?.round === gameState.round ? opponentTurnSeconds.seconds : undefined)
+            : visibleTurnSeconds}
         />
 
         <GameTable

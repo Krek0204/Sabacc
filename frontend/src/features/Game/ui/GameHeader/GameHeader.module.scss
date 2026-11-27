@@ -31,8 +31,51 @@
 }
 
 .badge[data-active='true'] {
-  border-color: var(--hud-gold);
-  box-shadow: 0 0 15px rgb(245 158 11 / 30%);
+  border-color: var(--hud-cyan);
+  box-shadow: 0 0 15px rgb(0 229 255 / 24%);
+}
+
+.turnIndicator {
+  --turn-accent: #9bbad2;
+
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border: 1px solid #395570;
+  border-radius: 8px;
+  background: rgb(15 23 42 / 95%);
+  color: var(--hud-text);
+  font-size: 15px;
+  white-space: nowrap;
+
+  &::before {
+    content: '';
+    flex: 0 0 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--turn-accent);
+  }
+}
+
+.turnIndicator[data-owner='self'] {
+  --turn-accent: var(--hud-cyan);
+
+  border-color: rgb(0 229 255 / 55%);
+  background: linear-gradient(105deg, rgb(0 229 255 / 14%), rgb(15 23 42 / 95%));
+  box-shadow: 0 0 14px rgb(0 229 255 / 13%);
+}
+
+.turnTime {
+  min-width: 5ch;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgb(7 11 20 / 65%);
+  color: var(--turn-accent);
+  font-size: 17px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
 }
 
 .label {

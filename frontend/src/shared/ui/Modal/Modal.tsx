@@ -9,6 +9,7 @@ import cls from './Modal.module.scss';
 
 interface ModalProps {
     className?: string;
+    contentClassName?: string;
     children?: ReactNode;
     isOpen?: boolean;
     onClose?: () => void;
@@ -18,7 +19,7 @@ interface ModalProps {
 const ANIMATION_DELAY = 300;
 
 export const Modal = (props: ModalProps) => {
-    const { className, children, isOpen, onClose, lazy } = props;
+    const { className, contentClassName, children, isOpen, onClose, lazy } = props;
 
     const { close, isClosing, isMounted } = useModal({
         animationDelay: ANIMATION_DELAY,
@@ -42,7 +43,7 @@ export const Modal = (props: ModalProps) => {
                 className={classNames(cls.Modal, mods, [className,])}
             >
                 <Overlay onClick={close} />
-                <div className={cls.content}>{children}</div>
+                <div className={classNames(cls.content, {}, [contentClassName])}>{children}</div>
             </div>
         </Portal>
     );
