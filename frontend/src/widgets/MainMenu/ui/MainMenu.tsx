@@ -1,5 +1,5 @@
 
-import { memo, useEffect, useState } from 'react';
+import { memo, useEffect, useId, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import axios from 'axios';
@@ -17,6 +17,9 @@ interface MainMenuProps {
 const avatars = ['👑', '⚔️', '👾', '🚀', '⭐️'];
 
 export const MainMenu = memo(({ className }: MainMenuProps) => {
+  const logoutDialog = useRef<HTMLDialogElement>(null);
+  const logoutTitleId = useId();
+  const logoutDescriptionId = useId();
   const [isOpen, setIsOpen] = useState(false);
   const [selectedAvatar, setSelectedAvatar] = useState(() => localStorage.getItem('selectedAvatar') || '');
   const navigate = useNavigate();
@@ -80,7 +83,7 @@ export const MainMenu = memo(({ className }: MainMenuProps) => {
             <div className={cls.label}>ИГРОК В СЕТИ</div>
             <div className={cls.username}>{selectedAvatar || '👤'} {user.username}</div>
           </div>
-          <button type="button" className={`${hud.button} ${cls.logout}`} onClick={handleLogout}>
+          <button type="button" className={`${hud.button} ${cls.logout}`} onClick={() => logoutDialog.current?.showModal()}>
             Выйти
           </button>
           <div className={cls.avatars} role="group" aria-label="Аватар">
@@ -104,6 +107,20 @@ export const MainMenu = memo(({ className }: MainMenuProps) => {
       </button>
       <Link className={hud.button} to={getRouteRooms()}>Комнаты</Link>
       <Link className={`${hud.button} ${cls.rules}`} to={getRouteRools()}>Правила</Link>
+
+      <dialog
+        ref={logoutDialog}
+        className={`${hud.panel} ${cls.logoutDialog}`}
+        aria-labelledby={logoutTitleId}
+        aria-describedby={logoutDescriptionId}
+      >
+        <h2 id={logoutTitleId}>Выйти из аккаунта?</h2>
+        <p id={logoutDescriptionId}>После выхода ваш ник будет недоступен.</p>
+        <form method="dialog" className={cls.logoutActions}>
+          <button type="submit" className={hud.button}>Отмена</button>
+          <button type="button" className={`${hud.button} ${hud.gold}`} onClick={handleLogout}>Выйти</button>
+        </form>
+      </dialog>
 
       <Modal isOpen={isOpen} onClose={() => setIsOpen(false)} lazy>
         <Auth />

@@ -1,4 +1,3 @@
-import { classNames } from '@/shared/lib/classNames/classNames';
 import { CountdownTimer } from '@/shared/ui/CountdownTimer';
 import { memo } from 'react';
 import cls from './GameRoundResultModal.module.scss';
@@ -7,9 +6,10 @@ import { selectCurrentUser } from '@/features/Auth';
 import { useOpponent } from '@/shared/lib/hooks/useOpponent';
 import CreditImg from '@/shared/assets/images/credit.png'
 import BackgroundTable from '@/shared/assets/images/table_cubes.png'
+import type { Player } from '../../model/types/game';
 
 interface GameRoundResultModalProps {
-  roundResult: any;
+  roundResult: { players: Player[] };
   roomState: any;
   secondsLeft: number;
   onClose: () => void;
@@ -19,10 +19,11 @@ export const GameRoundResultModal = memo(({ roundResult, roomState, secondsLeft,
   const user = useSelector(selectCurrentUser);
   const opponent = useOpponent(user?.id, roomState);
 
-  const getUsernameById = {
-    [user!.id]: user?.username,
-    [opponent!.id]: opponent?.username
-  }
+  // Сервер уже упорядочивает игроков с учётом эффектов жетонов.
+  const [first, second] = roundResult.players;
+  const ranked = first?.handRating != null && second?.handRating != null
+    && (first.handRating.first !== second.handRating.first
+      || first.handRating.second !== second.handRating.second);
 
   return (
     <div className={cls.GameRoundResultModal} onClick={onClose}>
@@ -32,10 +33,11 @@ export const GameRoundResultModal = memo(({ roundResult, roomState, secondsLeft,
           <div className={cls.title}>РЕЗУЛЬТАТ РАУНДА</div>
           <CountdownTimer secondsLeft={secondsLeft} caption="на закрытие" />
           <ul className={cls.list}>
-            {roundResult.players.map((player: any) => (
-              <li key={player.playerId} className={cls.container}>
+            {roundResult.players.map((player, index) => (
+              <li key={player.playerId} className={cls.container}
+                data-result={ranked ? (index === 0 ? 'winner' : 'loser') : undefined}>
                 <h4 className={cls.nickname}>
-                  <span>{getUsernameById[player.playerId]}</span>
+                  <span>{player.playerId === user?.id ? user.username : opponent?.username ?? 'Соперник'}</span>
                 </h4>
 
                 <div className={cls.credit}>

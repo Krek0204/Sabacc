@@ -55,6 +55,7 @@ export interface HandRating {
 }
 
 export enum TurnType {
+  PASS = "PASS",
   DISCARD_SAND = "DISCARD_SAND",
   DISCARD_BLOOD = "DISCARD_BLOOD",
   GET_SAND = "GET_SAND",

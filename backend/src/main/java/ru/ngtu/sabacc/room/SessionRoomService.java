@@ -5,7 +5,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.EventListener;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -200,6 +202,48 @@ public class SessionRoomService {
         log.info("User [{}] leaving all sessions", userId);
         List<SessionRoom> userSessionRooms = getAllUserSessionRooms(userId);
         userSessionRooms.forEach(r -> leaveRoom(r.getId(), userId));
+    }
+
+    @Transactional
+    public boolean cancelMatchmaking(Long roomId, Long userId) {
+        SessionRoom room = sessionRoomRepository.findByIdForUpdate(roomId).orElse(null);
+        if (room == null) {
+            return true;
+        }
+        if (!roomContainsUser(room, userId)) {
+            throw new PlayerNotRelatedToSessionException(roomId, userId);
+        }
+        if (room.getStatus() != SessionRoomStatus.WAITING_SECOND_USER || room.getPlayerSecond() != null) {
+            return false;
+        }
+        deleteSessionRoom(room);
+        return true;
+    }
+
+    @Transactional
+    public void requestRematch(Long roomId, Long userId, int matchNumber) {
+        SessionRoom room = getRoomForUpdate(roomId);
+        if (!roomContainsUser(room, userId)) {
+            throw new PlayerNotRelatedToSessionException(roomId, userId);
+        }
+        if (room.getMatchNumber() != matchNumber || room.getStatus() != SessionRoomStatus.FINISHED
+                || room.getPlayerSecond() == null || !room.isPlayerFirstConnected()
+                || !room.isPlayerSecondConnected()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Rematch is unavailable");
+        }
+
+        if (isFirst(room, userId)) {
+            room.setPlayerFirstReadyForRematch(true);
+        } else {
+            room.setPlayerSecondReadyForRematch(true);
+        }
+        if (room.isPlayerFirstReadyForRematch() && room.isPlayerSecondReadyForRematch()) {
+            room.setPlayerFirstReadyForRematch(false);
+            room.setPlayerSecondReadyForRematch(false);
+            room.setMatchNumber(matchNumber + 1);
+            room.setStatus(SessionRoomStatus.ALL_USERS_CONNECTED);
+            eventPublisher.publishEvent(new SessionReadyEvent(roomId, room));
+        }
     }
 
     @Transactional

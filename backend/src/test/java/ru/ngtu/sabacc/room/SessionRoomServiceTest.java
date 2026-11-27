@@ -10,6 +10,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.TransactionStatus;
+import org.springframework.web.server.ResponseStatusException;
 import ru.ngtu.sabacc.system.event.PlayerDisconnectedSessionEvent;
 import ru.ngtu.sabacc.system.event.PlayerLeftSessionEvent;
 import ru.ngtu.sabacc.system.event.PlayerReconnectedSessionEvent;
@@ -69,6 +70,50 @@ class SessionRoomServiceTest {
     private User host;
 
     private User guest;
+
+    @Test
+    void rematchRequiresBothPlayersAndResetsReadiness() {
+        SessionRoom room = service.createSessionRoom(host.getId());
+        service.joinSession(room.getId(), guest.getId());
+        room.setStatus(SessionRoomStatus.FINISHED);
+        room.setPlayerFirstConnected(true);
+        room.setPlayerSecondConnected(true);
+
+        service.requestRematch(room.getId(), host.getId(), 1);
+        service.requestRematch(room.getId(), host.getId(), 1);
+        assertThat(room.isPlayerFirstReadyForRematch()).isTrue();
+        assertThat(room.getStatus()).isEqualTo(SessionRoomStatus.FINISHED);
+        verify(eventPublisher, never()).publishEvent(any(SessionReadyEvent.class));
+
+        service.requestRematch(room.getId(), guest.getId(), 1);
+        assertThat(room.getMatchNumber()).isEqualTo(2);
+        assertThat(room.getStatus()).isEqualTo(SessionRoomStatus.ALL_USERS_CONNECTED);
+        assertThat(room.getPlayerFirst()).isEqualTo(host);
+        assertThat(room.getPlayerSecond()).isEqualTo(guest);
+        assertThat(room.isPlayerFirstReadyForRematch()).isFalse();
+        assertThat(room.isPlayerSecondReadyForRematch()).isFalse();
+        assertThatThrownBy(() -> service.requestRematch(room.getId(), guest.getId(), 1))
+                .isInstanceOf(ResponseStatusException.class);
+        verify(eventPublisher, times(1)).publishEvent(any(SessionReadyEvent.class));
+    }
+
+    @Test
+    void cancelsWaitingRoomAndAllowsRetry() {
+        Long roomId = service.createSessionRoom(host.getId()).getId();
+
+        assertThat(service.cancelMatchmaking(roomId, host.getId())).isTrue();
+        assertThat(rooms).doesNotContainKey(roomId);
+        assertThat(service.cancelMatchmaking(roomId, host.getId())).isTrue();
+    }
+
+    @Test
+    void refusesCancellationAfterOpponentJoins() {
+        Long roomId = service.createSessionRoom(host.getId()).getId();
+        service.joinSession(roomId, guest.getId());
+
+        assertThat(service.cancelMatchmaking(roomId, host.getId())).isFalse();
+        assertThat(rooms.get(roomId).getPlayerSecond()).isEqualTo(guest);
+    }
 
     @BeforeEach
     void setUp() {

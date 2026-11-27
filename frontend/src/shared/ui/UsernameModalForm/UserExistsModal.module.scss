@@ -1,27 +1,27 @@
-.UserExistsModal {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 27vw;
-  height: 100vh;
+.modal {
+  z-index: 200;
+}
+
+.modal .UserExistsModal {
+  width: min(440px, calc(100% - 32px));
+  max-width: none;
+  max-height: calc(100dvh - 32px);
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
   background: linear-gradient(180deg, #00206C, #005AAB, #020029);
-  padding: 60px;
-  border-radius: 76px;
+  padding: clamp(16px, 5vw, 32px);
+  border-radius: 16px;
   backdrop-filter: blur(40px);
   color: #FFFFFF;
   font-family: 'IBM Plex Mono', monospace;
   text-align: center;
-  z-index: 200;
   overflow-y: auto;
 }
 
 .UserExistsModal h2 {
   margin-bottom: 20px;
-  font-size: 3rem;
+  font-size: clamp(1.5rem, 5vw, 2rem);
   font-weight: 600;
   color: #FF4444;
   text-transform: uppercase;
@@ -30,7 +30,7 @@
 
 .UserExistsModal p {
   margin-bottom: 40px;
-  font-size: 1.5rem;
+  font-size: 1rem;
   color: #FFFFFF;
   line-height: 1.4;
   letter-spacing: 1px;
@@ -39,7 +39,7 @@
 .UserExistsModal button {
   background: linear-gradient(to right, #6073A0, #0A193A);
   color: #FFFFFF;
-  padding: 18px 45px;
+  padding: 12px 24px;
   border: 2px solid #FFFFFF;
   border-radius: 35px;
   cursor: pointer;

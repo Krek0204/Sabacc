@@ -1,12 +1,14 @@
 import { subscribeOnConnect } from '@/shared/lib/stomp/subscribeOnConnect';
 import { useEffect, useRef, useState } from 'react';
 import { useSelector } from 'react-redux';
+import { useNavigate } from 'react-router-dom';
 import { selectCurrentUser } from '@/features/Auth';
 import { Game } from '@/features/Game';
 import { useGameState } from '@/features/Game/model/hooks/useGameState';
 import { TOKEN_HAND_SIZE } from '@/features/Game/model/opponentTokensLeft';
 import { tokenCatalog } from '@/features/Game/model/tokenCatalog';
 import { TokensTypes } from '@/features/Game/model/types/game';
+import { getRouteMain } from '@/shared/const/router';
 import { formatSelectionCountdown } from '@/shared/lib/countdown/countdown';
 import hud from '@/shared/ui/Hud/Hud.module.scss';
 import {
@@ -23,6 +25,7 @@ import {
 import cls from './GamePage.module.scss';
 
 const GamePage = () => {
+  const navigate = useNavigate();
   const {
     client,
     gameState,
@@ -30,22 +33,48 @@ const GamePage = () => {
     isLoading,
     isGameInProgress,
     diceDetails,
+    opponentTurnNotice,
     handleDiceSelection,
     winnerId,
     gameDraw,
     roundResult,
     leaveCurrentRoom,
+    requestRematch,
+    cancelMatchmaking,
     fetchGameState,
   } = useGameState();
   const playerId = useSelector(selectCurrentUser)?.id;
+  const opponentId = roomState?.playerFirst?.id === playerId
+    ? roomState?.playerSecond?.id
+    : roomState?.playerFirst?.id;
+  const tokenSelectionDestination = roomState?.id == null
+    ? null
+    : `/topic/session/${roomState.id}/token-selection`;
 
   const [myTokens, setMyTokens] = useState<TokensTypes[]>([]);
   const [hasSelectedTokens, setHasSelectedTokens] = useState<boolean>(false);
   const [awaitingOpponentTokens, setAwaitingOpponentTokens] = useState(false);
   const [opponentReady, setOpponentReady] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState(false);
+
+  const handleCancelMatchmaking = async () => {
+    setIsCancelling(true);
+    setCancelError(false);
+    try {
+      if (await cancelMatchmaking()) {
+        navigate(getRouteMain(), { replace: true });
+      }
+    } catch {
+      setCancelError(true);
+    } finally {
+      setIsCancelling(false);
+    }
+  };
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectionSecondsLeft, setSelectionSecondsLeft] = useState(TOKEN_SELECTION_TIMEOUT_SEC);
+  const [opponentSecondsLeft, setOpponentSecondsLeft] = useState<number | null>(null);
   const selectionSettledRef = useRef(false);
   const confirmTokensRef = useRef<(tokens: TokensTypes[]) => void>(() => {});
   const opponentReplyRef = useRef(false);
@@ -95,17 +124,18 @@ const GamePage = () => {
 
   useEffect(() => {
     setOpponentReady(false);
+    setOpponentSecondsLeft(null);
     setAwaitingOpponentTokens(false);
     opponentReplyRef.current = false;
   }, [roomState?.id]);
 
   useEffect(() => {
-    if (!client || roomState?.id == null || playerId == null) {
+    if (!client || !tokenSelectionDestination || playerId == null) {
       return undefined;
     }
 
-    const destination = `/topic/session/${roomState.id}/token-selection`;
-    let subscription: { unsubscribe: () => void } | null = null;
+    const destination = tokenSelectionDestination;
+    let subscriptions: { unsubscribe: () => void }[] = [];
     let stopped = false;
 
     const publishReady = () => {
@@ -116,6 +146,23 @@ const GamePage = () => {
         destination,
         body: JSON.stringify({ playerId }),
       });
+    };
+
+    const handleCountdown = (message: { body: string }) => {
+      let data: { playerId?: unknown; seconds?: unknown } | null;
+      try {
+        data = JSON.parse(message.body);
+      } catch {
+        return;
+      }
+      if (opponentId == null || String(data?.playerId) !== String(opponentId)) {
+        return;
+      }
+      const seconds = data?.seconds;
+      if (typeof seconds === 'number' && Number.isInteger(seconds)
+        && seconds >= 0 && seconds <= TOKEN_SELECTION_TIMEOUT_SEC) {
+        setOpponentSecondsLeft(seconds);
+      }
     };
 
     const handleMessage = (message: { body: string }) => {
@@ -142,7 +189,10 @@ const GamePage = () => {
       if (stopped || !client.connected) {
         return;
       }
-      subscription = client.subscribe(destination, handleMessage);
+      subscriptions = [
+        client.subscribe(destination, handleMessage),
+        client.subscribe(`${destination}/countdown`, handleCountdown),
+      ];
       publishReady();
     };
 
@@ -150,10 +200,10 @@ const GamePage = () => {
 
     return () => {
       stopped = true;
-      subscription?.unsubscribe();
+      subscriptions.forEach((subscription) => subscription.unsubscribe());
       stopListening();
     };
-  }, [client, hasSelectedTokens, playerId, roomState?.id]);
+  }, [client, hasSelectedTokens, opponentId, playerId, tokenSelectionDestination]);
 
   useEffect(() => {
     if (!isModalOpen || hasSelectedTokens) {
@@ -178,6 +228,17 @@ const GamePage = () => {
     return () => window.clearInterval(timer);
   }, [isModalOpen, hasSelectedTokens]);
 
+  useEffect(() => {
+    if (!client || !tokenSelectionDestination || playerId == null || !isModalOpen || hasSelectedTokens) {
+      return undefined;
+    }
+    return subscribeOnConnect(client, () => {
+      client.publish({
+        destination: `${tokenSelectionDestination}/countdown`,
+        body: JSON.stringify({ playerId, seconds: selectionSecondsLeft }),
+      });
+    });
+  }, [client, hasSelectedTokens, isModalOpen, playerId, selectionSecondsLeft, tokenSelectionDestination]);
 
 
   const toggleToken = (token: TokensTypes) => {
@@ -257,18 +318,36 @@ const GamePage = () => {
           </footer>
         </section>
       ) : statusMessage ? (
-        <p className={`${hud.panel} ${cls.loader}`} role="status">
-          {waitingForOpponent && roomState?.id != null && (
-            <strong className={cls.roomNumber}>Комната {roomState.id}</strong>
+        <section className={`${hud.panel} ${cls.loader}`}>
+          <p role="status">
+            {waitingForOpponent && roomState?.id != null && (
+              <strong className={cls.roomNumber}>Комната {roomState.id}</strong>
+            )}
+            {statusMessage}
+            {waitingForTokens && opponentSecondsLeft != null && (
+              <span className={cls.waitingTimer} role="timer">
+                ⏱ Осталось {formatSelectionCountdown(opponentSecondsLeft)}
+              </span>
+            )}
+          </p>
+          {roomState?.status === 'WAITING_SECOND_USER' && !roomState.playerSecond && (
+            <div className={cls.cancelMatchmaking}>
+              <button type="button" className={hud.button} disabled={isCancelling} onClick={handleCancelMatchmaking}>
+                {isCancelling ? 'Отменяем подбор…' : 'Вернуться в главное меню'}
+              </button>
+              {cancelError && <p role="alert">Не удалось отменить подбор. Попробуйте ещё раз.</p>}
+            </div>
           )}
-          {statusMessage}
-        </p>
+        </section>
       ) : client && gameState && roomState && (
         <Game
+          key={roomState.matchNumber}
+          requestRematch={requestRematch}
           client={client}
           gameState={gameState}
           roomState={roomState}
           diceDetails={diceDetails}
+          opponentTurnNotice={opponentTurnNotice}
           handleDiceSelection={handleDiceSelection}
           winnerId={winnerId}
           gameDraw={gameDraw}

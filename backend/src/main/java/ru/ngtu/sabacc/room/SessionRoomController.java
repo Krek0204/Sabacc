@@ -53,6 +53,13 @@ public class SessionRoomController {
         return roomService.getAvailableRoomsForJoin(userId);
     }
 
+    @PostMapping("/{roomId}/rematch")
+    public ResponseEntity<Void> requestRematch(@PathVariable Long roomId, @RequestParam Long userId,
+                                               @RequestParam int matchNumber) {
+        roomService.requestRematch(roomId, userId, matchNumber);
+        return ResponseEntity.noContent().build();
+    }
+
     @PostMapping("/{roomId}/join")
     public void joinSession(@PathVariable Long roomId, @RequestParam Long userId) {
         roomService.joinSession(roomId, userId);
@@ -66,6 +73,14 @@ public class SessionRoomController {
     @PostMapping("/leave/{roomId}")
     public void leaveRooms(@PathVariable Long roomId, @RequestParam Long userId) {
         roomService.leaveRoom(roomId, userId);
+    }
+
+    @PostMapping("/{roomId}/cancel-matchmaking")
+    public ResponseEntity<Void> cancelMatchmaking(@PathVariable Long roomId, @RequestParam Long userId) {
+        if (roomService.cancelMatchmaking(roomId, userId)) {
+            return ResponseEntity.noContent().build();
+        }
+        return ResponseEntity.status(409).build();
     }
 
     @PostMapping("/leave/all")

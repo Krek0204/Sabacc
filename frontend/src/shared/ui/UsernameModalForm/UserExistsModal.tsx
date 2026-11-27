@@ -9,7 +9,7 @@
     }
 
     export const UserExistsModal: FC<UserExistsModalProps> = ({ isOpen, onClose }) => (
-      <Modal isOpen={isOpen} onClose={onClose} className={cls.UserExistsModal}>
+      <Modal isOpen={isOpen} onClose={onClose} className={cls.modal} contentClassName={cls.UserExistsModal}>
         <h2>Ошибка</h2>
         <p>Пользователь с таким именем уже существует</p>
         <Button onClick={onClose}>Вернуться</Button>

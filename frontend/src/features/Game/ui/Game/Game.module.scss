@@ -9,6 +9,32 @@
   padding: clamp(12px, 2vw, 24px);
 }
 
+.turnNotice {
+  position: fixed;
+  z-index: 201;
+  inset: 16px 12px auto;
+  width: fit-content;
+  max-width: calc(100% - 24px);
+  margin-inline: auto;
+  padding: 12px 20px;
+  border: 1px solid var(--hud-cyan);
+  border-inline-start-width: 4px;
+  border-radius: 10px;
+  background: #08172a;
+  color: #f2fbff;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.55);
+  font-size: 16px;
+  font-weight: 600;
+  text-align: center;
+  pointer-events: none;
+
+  &:empty {
+    padding: 0;
+    border: 0;
+    box-shadow: none;
+  }
+}
+
 .waitScreen {
   position: fixed;
   inset: 0;

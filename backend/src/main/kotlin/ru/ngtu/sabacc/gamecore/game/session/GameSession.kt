@@ -29,7 +29,8 @@ class GameSession(
         playerSecondId to Player(playerSecondId)
     )
     private var skipNextPlayer: Boolean = false
-    private var playersIter = players.keys.iterator()
+    private var roundTurnOrder = players.keys.toList()
+    private var playersIter = roundTurnOrder.iterator()
     private var currentPlayerId: Long = playersIter.next()
     private lateinit var board: Board
     private lateinit var waitingForMoveType: List<TurnType>
@@ -45,6 +46,10 @@ class GameSession(
     private var isCookTheBooksActive: Boolean = false  // Новый флаг
 
     override fun start() {
+        roundTurnOrder = players.keys.shuffled()
+        playersIter = roundTurnOrder.iterator()
+        currentPlayerId = playersIter.next()
+
         board = initGameBoard()
         waitingForMoveType = initWaitingForMoveType()
 
@@ -484,62 +489,41 @@ class GameSession(
         waitingForMoveType = initWaitingForMoveType()
         cardPrice = 1
 
-        // ВАЖНО: сбрасываем skipNextPlayer при ЛЮБОМ переходе хода
         val shouldSkipNextPlayer = skipNextPlayer
-        skipNextPlayer = false  // Сбрасываем сразу
-
-        // Проверяем, нужно ли пропустить следующего игрока
-        if (shouldSkipNextPlayer) {
-            if (playersIter.hasNext()) {
-                val skippedPlayerId = playersIter.next()
-                logger.debug { "Session $sessionId: Player $skippedPlayerId was forced to skip by token" }
-
-                // Используем существующую логику пропуска через функцию pass
-                val forcedPassTurn = TurnDto(
-                    sessionId,
-                    skippedPlayerId,
-                    TurnType.PASS,
-                    mutableMapOf("forced" to true)  // Отмечаем как принудительный
-                )
-
-                // Отправляем уведомление о принудительном пропуске
-                gameMessageExchanger.sendAcceptedTurn(forcedPassTurn, this)
-
-                // Вызываем pass для обработки пропуска
-                pass(forcedPassTurn)
-                return  // Выходим, так как pass уже вызовет nextState()
-            }
-        }
+        skipNextPlayer = false
 
         if (playersIter.hasNext()) {
             currentPlayerId = playersIter.next()
-            players[currentPlayerId]!!.isImmuneToTokens = false // убираем иммунитет 2-му игроку
+            players[currentPlayerId]!!.isImmuneToTokens = false
             logger.debug { "Session $sessionId: Player $currentPlayerId is the current player" }
-        }
-        else {
-            playersIter = players.keys.iterator()
-            players[playersIter.next()]!!.isImmuneToTokens = false // убираем иммунитет 1-му игроку
+        } else {
+            players[roundTurnOrder.first()]!!.isImmuneToTokens = false
             logger.debug { "Session $sessionId: Turn $turn is over" }
-            nextTurn()
+            if (!nextTurn()) return
+        }
+
+        if (shouldSkipNextPlayer) {
+            pass(TurnDto(sessionId, currentPlayerId, TurnType.PASS, mutableMapOf("forced" to true)))
         }
     }
 
-    private fun nextTurn() {
-        playersIter = players.keys.iterator()
+    private fun nextTurn(): Boolean {
+        playersIter = roundTurnOrder.iterator()
         currentPlayerId = playersIter.next()
 
         if (turn < 3 && passCount != players.size) {
             turn++
             passCount = 0
             logger.debug { "Session $sessionId: Starting next turn. Turn $turn" }
+            return true
         }
-        else {
-            logger.debug { "Session $sessionId: Round $round is over, processing Imposter cards" }
-            CompletableFuture.runAsync {
-                TimeUnit.SECONDS.sleep(1)
-                processImposterCard()
-            }
+
+        logger.debug { "Session $sessionId: Round $round is over, processing Imposter cards" }
+        CompletableFuture.runAsync {
+            TimeUnit.SECONDS.sleep(1)
+            processImposterCard()
         }
+        return false
     }
 
     private fun processImposterCard(turnDTO: TurnDto? = null) {
@@ -764,8 +748,6 @@ class GameSession(
     private fun nextRound() {
         round++
         turn = 1
-        playersIter = players.keys.iterator()
-        currentPlayerId = playersIter.next()
         passCount = 0
 
         impostersToSixActive = false

@@ -36,6 +36,37 @@
   font-size: 12px;
 }
 
+.logoutDialog {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(420px, calc(100% - 32px));
+  padding: clamp(16px, 5vw, 28px);
+  background: #0f172a;
+  color: var(--hud-text);
+
+  &::backdrop {
+    background: rgb(7 11 20 / 78%);
+  }
+
+  h2 {
+    margin: 0;
+    font-size: 22px;
+  }
+
+  p {
+    margin: 8px 0 24px;
+    color: var(--hud-muted);
+  }
+}
+
+.logoutActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
 .avatars {
   display: flex;
   flex-wrap: wrap;
