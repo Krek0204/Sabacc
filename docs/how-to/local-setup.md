@@ -8,8 +8,8 @@ REST списка комнат и SockJS `/game/info` проверены усп�
 
 ## Подготовка
 
-Нужны Git, запущенный Docker Desktop (либо работающий Docker Engine) с Compose v2, Node.js/npm для сборки frontend и свободный
-порт 80. README исходного проекта указывает Node.js 18+; точная версия не закреплена.
+Нужны Git, запущенный Docker Desktop (либо работающий Docker Engine) с Compose v2+ и свободный
+порт 80. Frontend и backend собираются внутри Docker; Node.js и Java для этого на хосте не нужны.
 Для backend вне контейнера нужен JDK 21. Frontend устанавливается по package-lock.json.
 На macOS проверь `java -version`; при нескольких JDK выбери 21:
 
@@ -24,7 +24,7 @@ java -version
 Если репозитория ещё нет:
 
 ```sh
-git clone https://github.com/Krek0204/Sabacc.git
+git clone https://github.com/HardRandom/Sabacc.git
 cd Sabacc
 ```
 
@@ -42,31 +42,27 @@ cp .env.example .env
 ## Запуск одной командой
 
 Из корня checkout выполни `./scripts/dev.sh up`. Скрипт проверяет Docker,
-создаёт отсутствующий `.env`, выполняет `npm ci`, собирает локальный `frontend/dist`
-и Docker-образы, затем запускает Compose. Существующий `.env` не перезаписывается.
+создаёт отсутствующий `.env`, собирает сайт и backend в Docker-образы,
+затем запускает Compose и ждёт готовности сервисов. Существующий `.env` не перезаписывается.
 Скрипт можно вызвать по полному пути из любого каталога.
 
 - `./scripts/dev.sh build` — только сборка, без перезапуска контейнеров.
 - `./scripts/dev.sh start` — запуск готовой сборки.
 - `./scripts/dev.sh stop` — остановка.
 - `./scripts/dev.sh down` — удаление контейнеров/сети, данные БД сохраняются.
-- `./scripts/dev.sh status` — состояние, включая завершившийся frontend-контейнер.
+- `./scripts/dev.sh status` — состояние трёх сервисов.
 - `./scripts/dev.sh logs` — поток логов; выход через Ctrl+C. Перед передачей логов убери секреты.
 
 Ниже приведены ручные команды для диагностики и отдельных режимов.
 
 ## Полный стек
 
-Nginx использует `frontend/dist` с хоста; сборка образа frontend его не заменяет.
+Nginx содержит готовый сайт внутри образа; локальный frontend/dist не требуется.
 
 ```sh
-cd frontend
-npm ci
-npm run build
-cd ..
 docker compose --env-file .env config --quiet
-docker compose --env-file .env up --build -d
-docker compose --env-file .env ps -a
+docker compose --env-file .env up --build -d --wait --wait-timeout 180
+docker compose --env-file .env ps
 ```
 
 Проверь http://localhost и API:
@@ -77,10 +73,12 @@ curl --fail http://localhost/api/v1/room/all
 
 Успешный API-ответ проверяет только этот endpoint. Для проверки игры открой второй
 браузер/инкогнито с другим именем и выполни [ручной сценарий](../agents/verification.md).
-Frontend-контейнер может завершиться с кодом 0: статику обслуживает Nginx.
-Если backend ещё запускается, посмотри логи; `depends_on` здесь не ждёт готовности БД.
+Compose ждёт готовности PostgreSQL и backend. После изменения frontend:
 
-После изменения frontend заново выполни `npm run build` в `frontend/`.
+```sh
+docker compose --env-file .env up --build -d nginx
+```
+
 После изменения backend пересобери сервис:
 
 ```sh
@@ -146,8 +144,8 @@ Vite слушает 5173, backend — 8080. Текущий Vite proxy удаля
   Для другого префикса передай переменную процессу сборки явно.
 - `SPRING_PROFILES_ACTIVE` — в полном Compose сейчас жёстко задан `prod`;
   одноимённая запись `.env` не переключает профиль этого сервиса.
-- `PUBLIC_IP` — передаётся backend, но не заменяет автоматически захардкоженные origins
-  в текущем `application-prod.yml`. Для нового домена нужно менять настройки приложения.
+- `HTTP_PORT` — публикуемый порт (по умолчанию 80). IP/домен в сборку не зашивается;
+  сайт и API работают через один адрес Nginx.
 
-Публичное развёртывание требует отдельного согласованного процесса; старые адреса
+Публичное развёртывание описано в [server-deploy.md](server-deploy.md); старые адреса
 команды в Project.md не являются адресами вашего стенда.

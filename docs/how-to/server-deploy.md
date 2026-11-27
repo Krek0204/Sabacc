@@ -1,144 +1,124 @@
-# Запуск на сервере
+# Запуск на Ubuntu-сервере
 
-Текущий репозиторий можно поднять на Linux-сервере тем же Docker Compose, что и
-[локальный стенд](local-setup.md). Это HTTP на порту 80, без HTTPS, без реестра
-образов и без отдельного процесса релизов.
+Нужны Git, Docker Engine с Compose v2 или новее, исходящий интернет на время сборки
+и свободный TCP-порт 80. Node.js, Java и PostgreSQL на хост устанавливать не нужно:
+Docker собирает frontend/backend и запускает PostgreSQL. Для сборки желательно
+2–4 ГБ RAM. Команды ниже выполняются на сервере.
 
-Инструкция собрана по коду на 2026-10-06. Живой сервер в этой задаче не поднимался.
-Локальный Compose ранее проверялся по [local-setup](local-setup.md).
+## Публичный IP
 
-## Что осталось от прошлой команды
+В облачной панели привяжите публичный IPv4 к серверу. Обычно Ubuntu получает сеть
+автоматически: вручную прописывать IP в Netplan не нужно. Если провайдер выдал
+отдельные параметры сети, используйте именно его IP, префикс и шлюз.
 
-Файла `руководство devops.docx` в git нет. В [Project.md](../../Project.md) (раздел 12)
-это историческая выкладка: IP `45.89.66.57`, образы Docker Hub `dima429/sabacc-main-*:v5`,
-упоминание Portainer. Эти адреса и образы текущий Compose не использует.
-
-Сейчас образы собираются на машине, где лежит checkout: `sabacc-backend:local` и
-`sabacc-frontend:local`. Статику Nginx берёт с диска хоста, из `frontend/dist`,
-а не из контейнера frontend.
-
-## Насколько это реально
-
-Поднять игру на своём сервере можно, если есть Linux, Docker Compose v2, Node.js 18+,
-Git, свободный порт 80 и исходящий интернет на время первой сборки (Gradle и npm).
-Ориентир по памяти: сборка backend в Docker комфортнее при 2 ГБ RAM и более.
-
-Ожидаемый результат — сайт `http://<публичный-адрес>/` для двух игроков в браузере.
-Порт 8080 и PostgreSQL наружу не публикуются.
-
-Перед первой сборкой замените чужой IP в prod-конфиге. Иначе WebSocket может
-отклонить рукопожатие с нового адреса. Остальные ограничения ниже не блокируют
-первый запуск, но это не законченный production.
-
-## Ограничения текущей выкладки
-
-- `PUBLIC_IP` попадает в окружение контейнера backend и нигде в Spring не читается.
-  Origins задаёт `backend/src/main/resources/application-prod.yml`.
-- `server.host` в том же файле обязателен для старта и на маршрутизацию не влияет.
-- CORS в `SecurityConfig` разрешает только `http://localhost:5173`. Через Nginx
-  страница и API одного origin, браузер CORS не применяет. Отдельный фронт на
-  другом домене к этому API не подключится.
-- В `app.conf` у `location /game/` нет длинных таймаутов, в отличие от `/ws/`.
-  Игровой SockJS ходит на `/game`. Долгая партия может оборваться
-  ([Bugs.md](../../Bugs.md), M19).
-- Партия хранится в памяти JVM. `docker compose restart` и пересборка backend
-  обрывают активные игры. В PostgreSQL остаются пользователи и комнаты.
-- Пароль БД задаётся при первом создании `postgres-data/`. Смена `.env` после
-  этого пароль уже инициализированной базы не меняет.
-- HTTPS, резервное копирование, откат релиза и публикация в реестр в Compose
-  не описаны.
-- `SPRING_PROFILES_ACTIVE` в `.env` не действует: Compose всегда ставит `prod`.
-  Без этого профиля backend не стартует: брокер STOMP описан только в prod.
-- Авторизация — ник и id в браузере. Разрушающие REST-методы доступны без проверки
-  вызывающего. Сервер с открытым портом 80 этому соответствует.
-
-## Подготовка сервера
-
-Нужны Docker Engine с плагином Compose v2, Git и Node.js/npm. Порт 80 свободен.
-В файрволе откройте 80/tcp. Порты 5432 и 8080 снаружи не открывайте.
+В сетевом экране провайдера разрешите входящие TCP 22 (SSH) и 80 (игра).
+Если UFW установлен и включён, добавьте правила, сохранив доступ по SSH:
 
 ```sh
-git clone https://github.com/Krek0204/Sabacc.git
-cd Sabacc
-cp .env.example .env
+sudo ufw allow OpenSSH
+sudo ufw allow 80/tcp
+sudo ufw status
 ```
 
-В `.env` задайте свой пароль PostgreSQL и публичный адрес в `PUBLIC_IP`
-(IP или домен без схемы). `PUBLIC_IP` конфигурацию Spring не подменяет;
-значение полезно как пометка оператора. `VITE_API_URL` оставьте `/api`.
-Не коммитьте `.env` и не выполняйте `source .env`: в cron есть пробелы,
-Compose читает файл сам.
+Порты 5432 и 8080 наружу не открывайте. Публичный IP в код или .env вписывать
+не требуется: Nginx принимает запросы по адресу сайта, frontend использует /api,
+SockJS — /game. Backend проверяет совпадение origin с адресом сайта;
+это [стандартное поведение Spring](https://docs.spring.io/spring-framework/reference/web/websocket/server.html#websocket-server-allowed-origins).
+Текущий адрес игры: http://103.85.115.215/.
 
-В `backend/src/main/resources/application-prod.yml` замените каждое
-`http://45.89.66.57` на `http://<ваш-ip-или-домен>` и значение `server.host`
-на тот же адрес без схемы. Строки `localhost` можно оставить. Этот файл
-попадает в JAR при сборке образа: правка после `docker compose build`
-сама в контейнер не попадёт.
+## Первая установка
+
+```sh
+docker version
+docker compose version
+git clone --branch bugfix/no-ticket-cloud-server-startup https://github.com/HardRandom/Sabacc.git /opt/Sabacc
+cd /opt/Sabacc
+cp .env.example .env
+chmod 600 .env
+```
+
+Пока исправление находится в отдельной ветке, используется указанный --branch.
+После слияния можно устанавливать main.
+
+В новом .env замените POSTGRES_PASSWORD до первого запуска БД. Например:
+
+```sh
+db_password=$(openssl rand -hex 24)
+sed -i "s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$db_password/" .env
+unset db_password
+```
+
+Оставьте VITE_API_URL=/api и HTTP_PORT=80. Не выполняйте source .env:
+расписание cron содержит пробелы, Compose читает файл сам.
+Существующие .env и postgres-data/ не перезаписывайте.
+Смена пароля только в .env не меняет пароль уже созданной PostgreSQL.
 
 ## Сборка и запуск
 
-На Linux удобен `./scripts/dev.sh up`: он создаёт отсутствующий `.env`,
-собирает `frontend/dist` на хосте, собирает образы и запускает Compose.
-Уже существующий `.env` скрипт не перезаписывает. Скрипт не запускает тесты
-и не удаляет `postgres-data/`.
-
-Те же шаги вручную:
-
 ```sh
-cd frontend
-npm ci
-npm run build
-cd ..
+cd /opt/Sabacc
 docker compose --env-file .env config --quiet
-docker compose --env-file .env up --build -d
-docker compose --env-file .env ps -a
+docker compose --env-file .env up -d --build --wait --wait-timeout 180
+docker compose --env-file .env ps
 ```
 
-Контейнер `sabacc_frontend` завершается с кодом 0: он только собирает образ.
-Игру отдаёт Nginx из `./frontend/dist`. Без `npm run build` на этом хосте
-сайт будет пустым, даже если образ frontend собрался.
-
-Первый запуск backend ждёт PostgreSQL и накатывает Flyway. Пока API не ответил,
-смотрите лог:
-
-```sh
-docker compose --env-file .env logs --tail=100 backend
-```
+Либо ./scripts/dev.sh up. Отдельная npm-сборка на хосте не нужна.
+Сайт и Nginx входят в образ sabacc-web:local. Compose ждёт готовности PostgreSQL,
+затем backend, затем запускает Nginx. Flyway применяет миграции автоматически.
+После перезагрузки сервера контейнеры поднимаются политикой unless-stopped,
+если Docker включён в автозагрузку: sudo systemctl enable --now docker.
 
 ## Проверка
 
 ```sh
+curl --fail http://127.0.0.1/
 curl --fail http://127.0.0.1/api/v1/room/all
 curl --fail http://127.0.0.1/game/info
+docker compose --env-file .env logs --tail=100 backend nginx
 ```
 
-С другой машины откройте `http://<публичный-адрес>/`. Второй игрок — другое
-имя во втором браузере или в инкогнито. Сценарий партии —
-в [verification.md](../agents/verification.md).
+Откройте http://103.85.115.215/ с другого устройства. Создайте разных игроков
+в двух браузерах, войдите в одну комнату, выберите жетоны и сделайте ходы.
+До прихода второго игрока обновление и возврат должны сохранять ожидание с номером
+комнаты. Во время партии соперник видит паузу до возврата.
 
-Успешный `curl` на localhost не доказывает, что Origin нового адреса принят
-WebSocket. Если список комнат открывается, а партия не соединяется, проверьте,
-что в собранном образе уже ваш адрес, а не `45.89.66.57`, и пересоберите backend.
+Если localhost отвечает, а публичный IP — нет, проверяйте привязку IP и firewall
+у провайдера/Ubuntu. Если контейнер unhealthy, смотрите его лог; не удаляйте базу
+для устранения ошибки. Не передавайте логи с паролями и токенами.
 
-## Обновление
+## Обновление и остановка
+
+Обновляйте игру между партиями: состояние игры находится в памяти JVM,
+перезапуск backend его теряет. PostgreSQL сохраняет пользователей и комнаты;
+восстановление самой партии после рестарта не реализовано.
 
 ```sh
-git pull
-cd frontend && npm ci && npm run build && cd ..
-docker compose --env-file .env up --build -d
+cd /opt/Sabacc
+git pull --ff-only
+docker compose --env-file .env up -d --build --wait --wait-timeout 180
 ```
 
-Перезапуск backend обрывает текущие партии. Каталог `postgres-data/` не удаляйте:
-это данные пользователей и комнат. `docker compose down` контейнеры убирает,
-этот каталог на хосте сохраняет.
+Остановка без удаления данных:
 
-Остановка без удаления контейнеров: `docker compose --env-file .env stop`
-или `./scripts/dev.sh stop`.
+```sh
+docker compose --env-file .env stop
+```
 
-## Что эта инструкция не делает
+Повторный запуск готовых образов:
 
-Не настраивает сертификат, доменное имя, бэкап `postgres-data/`, мониторинг
-(`prometheus.yml` в Compose не подключён) и выкладку чужих образов с Docker Hub.
-Пока сайт открыт по HTTP на порту 80, отдельный TLS-прокси потребует ещё и
-`https://...` в origins и проксирование `/api/` и `/game/` с заголовками Upgrade.
-Это отдельная настройка, в репозитории её нет.
+```sh
+docker compose --env-file .env up -d --wait --wait-timeout 180
+```
+
+Каталог postgres-data/ не удаляйте. Перед обновлением сохраните дамп:
+
+```sh
+docker compose --env-file .env exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' | gzip > "sabacc-$(date +%Y%m%d-%H%M%S).sql.gz"
+```
+
+HTTP по IP не требует домена или туннеля. HTTPS, серверная авторизация пользователей,
+мониторинг и автоматические резервные копии требуют отдельной настройки.
+
+После перезапуска backend ранее начатые партии помечаются завершёнными: их карты
+не сохранились. Пользователи и комнаты остаются в БД, комнаты ожидания доступны;
+можно начать новую партию без попытки вернуться в потерянную сессию.

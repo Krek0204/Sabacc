@@ -14,16 +14,16 @@ public class WebsocketConfigProperties {
     @Data
     public static class Stomp {
         private String endpoint = "/ws";
-        private String allowedOrigin;
-        private String allowedOriginPatterns;
+        private String[] allowedOrigin = new String[0];
+        private String[] allowedOriginPatterns = new String[0];
         private boolean sockJsEnabled = true;
     }
 
     @Data
     public static class Game {
         private String endpoint = "/game";
-        private String allowedOrigin;
-        private String allowedOriginPatterns;
+        private String[] allowedOrigin = new String[0];
+        private String[] allowedOriginPatterns = new String[0];
         private boolean sockJsEnabled = true;
     }
 

@@ -48,8 +48,8 @@ PostgreSQL и настройки приложения. Для локальной
 
 ## Стек и ручная проверка
 
-Из корня: подготовь локальный `.env` из `.env.example`, собери `frontend/dist`,
-затем используй `docker compose --env-file .env up --build`, как описано в README,
+Из корня: подготовь локальный `.env` из `.env.example`,
+затем используй `docker compose --env-file .env up -d --build --wait`, как описано в README,
 или `./scripts/dev.sh up`. Команда запускает сервисы и пишет данные БД.
 Для проверки конфигурации без запуска:
 `docker compose --env-file .env config --quiet` (нужны Docker Compose и `.env`).

@@ -1,3 +1,4 @@
+import { subscribeOnConnect } from '@/shared/lib/stomp/subscribeOnConnect';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useSelector } from 'react-redux';
 import { Client } from '@stomp/stompjs';
@@ -317,23 +318,18 @@ export const Game = memo(({
     };
 
     const listen = () => {
-      if (stopped || !client.connected || subscription) {
+      if (stopped || !client.connected) {
         return;
       }
       subscription = client.subscribe(destination, handleMessage);
     };
 
-    listen();
-    const previousOnConnect = client.onConnect;
-    client.onConnect = (frame) => {
-      previousOnConnect?.(frame);
-      listen();
-    };
+    const stopListening = subscribeOnConnect(client, listen);
 
     return () => {
       stopped = true;
       subscription?.unsubscribe();
-      client.onConnect = previousOnConnect;
+      stopListening();
     };
   }, [client, opponentId, roomState.id, showDraw, showWinner, user]);
 
@@ -366,7 +362,6 @@ export const Game = memo(({
     roundClosedRef.current = true;
     setMyRoundClosed(true);
     publishRoundAction('closed');
-    fetchGameState();
     if (opponentTimedOutRef.current) {
       roundDecidedRef.current = true;
       setWaitingForOpponentRound(false);
@@ -382,6 +377,7 @@ export const Game = memo(({
       setCurrentModal('GAME');
       return;
     }
+    fetchGameState();
     setCurrentModal(null);
     setWaitingForOpponentRound(!opponentClosedRef.current);
   };

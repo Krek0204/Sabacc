@@ -89,6 +89,8 @@ class SessionRoomServiceTest {
             rooms.put(room.getId(), room);
             return room;
         });
+        lenient().when(sessionRoomRepository.findByIdForUpdate(anyLong())).thenAnswer(invocation ->
+                Optional.ofNullable(rooms.get(invocation.getArgument(0))));
         lenient().when(sessionRoomRepository.findById(anyLong())).thenAnswer(invocation ->
                 Optional.ofNullable(rooms.get(invocation.getArgument(0))));
         lenient().when(sessionRoomRepository.findAllByPlayerFirstIdAndStatusNot(anyLong(), any())).thenReturn(List.of());
@@ -376,6 +378,96 @@ class SessionRoomServiceTest {
 
         assertThatThrownBy(() -> service.handlePlayerSocketConnection(room.getId(), guest.getId()))
                 .isInstanceOf(SecondPlayerIsNotJoinedException.class);
+    }
+
+    @Test
+    @DisplayName("Возврат в пустую комнату оставляет ожидание соперника")
+    void returnBeforeOpponentJoinsDoesNotStartGame() {
+        SessionRoom room = service.createSessionRoom(host.getId());
+        service.handlePlayerSocketConnection(room.getId(), host.getId());
+        service.handlePlayerSocketDisconnect(room.getId(), host.getId());
+
+        service.returnToSession(room.getId(), host.getId());
+
+        assertThat(room.getStatus()).isEqualTo(SessionRoomStatus.WAITING_SECOND_USER);
+        assertThat(room.isPlayerFirstConnected()).isFalse();
+        verify(eventPublisher, never()).publishEvent(any(PlayerReconnectedSessionEvent.class));
+        verify(eventPublisher, never()).publishEvent(any(SessionReadyEvent.class));
+        service.handlePlayerSocketConnection(room.getId(), host.getId());
+        service.joinSession(room.getId(), guest.getId());
+        service.handlePlayerSocketConnection(room.getId(), guest.getId());
+        verify(eventPublisher, times(1)).publishEvent(any(SessionReadyEvent.class));
+    }
+
+    @Test
+    @DisplayName("Возврат после join не пропускает старт новой партии")
+    void returnAfterJoinWaitsForBothSockets() {
+        SessionRoom room = service.createSessionRoom(host.getId());
+        service.handlePlayerSocketConnection(room.getId(), host.getId());
+        service.joinSession(room.getId(), guest.getId());
+
+        service.returnToSession(room.getId(), guest.getId());
+
+        assertThat(room.getStatus()).isEqualTo(SessionRoomStatus.ALL_USERS_JOINED);
+        assertThat(room.isPlayerSecondConnected()).isFalse();
+        service.handlePlayerSocketConnection(room.getId(), guest.getId());
+        verify(eventPublisher, times(1)).publishEvent(any(SessionReadyEvent.class));
+    }
+
+    @Test
+    @DisplayName("Возврат в партию снимает паузу только после подключения сокета")
+    void returnDuringGameWaitsForHandshake() {
+        SessionRoom room = seatBothAndConnect();
+        room.setStatus(SessionRoomStatus.IN_PROGRESS);
+        service.handlePlayerSocketDisconnect(room.getId(), guest.getId());
+
+        service.returnToSession(room.getId(), guest.getId());
+
+        assertThat(room.getStatus()).isEqualTo(SessionRoomStatus.PLAYER_DISCONNECTED);
+        assertThat(room.isPlayerSecondConnected()).isFalse();
+        verify(eventPublisher, never()).publishEvent(any(PlayerReconnectedSessionEvent.class));
+        service.handlePlayerSocketConnection(room.getId(), guest.getId());
+        assertThat(room.getStatus()).isEqualTo(SessionRoomStatus.IN_PROGRESS);
+        assertThat(room.getPlayerSecondLeftAt()).isNull();
+        verify(eventPublisher, times(1)).publishEvent(any(PlayerReconnectedSessionEvent.class));
+    }
+
+    @Test
+    @DisplayName("Рестарт завершает потерянную партию, сохраняя комнату и пользователей")
+    void restartClosesStartedGamesButPreservesWaitingRooms() {
+        SessionRoom waiting = service.createSessionRoom(host.getId());
+        SessionRoom started = SessionRoom.builder()
+                .playerFirst(host)
+                .playerSecond(guest)
+                .status(SessionRoomStatus.IN_PROGRESS)
+                .isPlayerFirstConnected(true)
+                .isPlayerSecondConnected(true)
+                .build();
+        started.setId(99L);
+        rooms.put(started.getId(), started);
+        org.mockito.Mockito.when(sessionRoomRepository.findAll()).thenReturn(List.of(waiting, started));
+
+        service.resetConnectionsAfterRestart();
+
+        assertThat(waiting.getStatus()).isEqualTo(SessionRoomStatus.WAITING_SECOND_USER);
+        assertThat(started.getStatus()).isEqualTo(SessionRoomStatus.FINISHED);
+        assertThat(started.isPlayerFirstConnected()).isFalse();
+        assertThat(started.isPlayerSecondConnected()).isFalse();
+        assertThat(started.getPlayerFirst()).isEqualTo(host);
+        assertThat(started.getPlayerSecond()).isEqualTo(guest);
+        assertThat(rooms).containsKeys(waiting.getId(), started.getId());
+    }
+
+    @Test
+    @DisplayName("Завершённая комната не предлагается для возврата даже создателю")
+    void finishedRoomIsNotReturnable() {
+        SessionRoom room = service.createSessionRoom(host.getId());
+        room.setStatus(SessionRoomStatus.FINISHED);
+        org.mockito.Mockito.when(sessionRoomRepository
+                .findByPlayerFirstIdOrPlayerSecondIdAndStatusNot(host.getId(), host.getId(), SessionRoomStatus.FINISHED))
+                .thenReturn(List.of(room));
+
+        assertThat(service.findReturnableRoom(host.getId())).isEmpty();
     }
 
     private SessionRoom seatBothAndConnect() {
